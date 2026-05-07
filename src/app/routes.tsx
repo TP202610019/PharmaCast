@@ -6,6 +6,8 @@ import { History } from "./pages/History";
 import { HistoryDetail } from "./pages/HistoryDetail";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { Terms } from "./pages/Terms";
 
 function NotFound() {
   return (
@@ -24,6 +26,14 @@ export const router = createBrowserRouter([
   {
     path: "/register",
     Component: Register,
+  },
+  {
+    path: "/forgot-password",
+    Component: ForgotPassword,
+  },
+  {
+    path: "/terms",
+    Component: Terms,
   },
   {
     path: "/",

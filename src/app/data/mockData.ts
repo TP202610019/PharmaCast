@@ -47,6 +47,10 @@ const generateChartData = (days: number): ChartDataPoint[] => {
     const base = 320 + Math.sin(i * 0.3) * 80 + Math.random() * 40;
     if (i < 0) {
       data.push({ date: label, historical: Math.round(base), predicted: null });
+    } else if (i === 0) {
+      // Bridge point: both lines share this value so they connect visually
+      const val = Math.round(base);
+      data.push({ date: label, historical: val, predicted: val });
     } else {
       data.push({ date: label, historical: null, predicted: Math.round(base * 1.05) });
     }
@@ -66,9 +70,9 @@ export const mockHistory: PredictionRecord[] = [
     status: "completed",
     summaryCards: [
       { label: "Demanda Total Prevista", value: "3,840 uds", change: "+12.4%", positive: true },
-      { label: "Productos Críticos", value: "7", change: "+2", positive: false },
+      { label: "Productos Analizados", value: "48", change: "+3", positive: true },
       { label: "Precisión del Modelo", value: "94.2%", change: "+1.3%", positive: true },
-      { label: "Costo Estimado", value: "$28,450", change: "-5.2%", positive: true },
+      { label: "Horizonte de Predicción", value: "30 días", change: "", positive: true },
     ],
     chartData: generateChartData(30),
     products: [
@@ -93,9 +97,9 @@ export const mockHistory: PredictionRecord[] = [
     status: "completed",
     summaryCards: [
       { label: "Demanda Total Prevista", value: "2,100 uds", change: "+8.1%", positive: true },
-      { label: "Productos Críticos", value: "4", change: "-1", positive: true },
+      { label: "Productos Analizados", value: "42", change: "+2", positive: true },
       { label: "Precisión del Modelo", value: "91.8%", change: "+0.7%", positive: true },
-      { label: "Costo Estimado", value: "$15,200", change: "+2.1%", positive: false },
+      { label: "Horizonte de Predicción", value: "15 días", change: "", positive: true },
     ],
     chartData: generateChartData(15),
     products: [
@@ -116,9 +120,9 @@ export const mockHistory: PredictionRecord[] = [
     status: "completed",
     summaryCards: [
       { label: "Demanda Total Prevista", value: "840 uds", change: "+5.3%", positive: true },
-      { label: "Productos Críticos", value: "3", change: "0", positive: true },
+      { label: "Productos Analizados", value: "38", change: "+1", positive: true },
       { label: "Precisión del Modelo", value: "96.1%", change: "+2.2%", positive: true },
-      { label: "Costo Estimado", value: "$6,720", change: "-1.8%", positive: true },
+      { label: "Horizonte de Predicción", value: "7 días", change: "", positive: true },
     ],
     chartData: generateChartData(7),
     products: [
@@ -138,9 +142,9 @@ export const mockHistory: PredictionRecord[] = [
     status: "archived",
     summaryCards: [
       { label: "Demanda Total Prevista", value: "4,120 uds", change: "+15.7%", positive: true },
-      { label: "Productos Críticos", value: "9", change: "+4", positive: false },
+      { label: "Productos Analizados", value: "51", change: "+5", positive: true },
       { label: "Precisión del Modelo", value: "89.5%", change: "-1.1%", positive: false },
-      { label: "Costo Estimado", value: "$32,900", change: "+8.3%", positive: false },
+      { label: "Horizonte de Predicción", value: "30 días", change: "", positive: true },
     ],
     chartData: generateChartData(30),
     products: [
@@ -159,9 +163,9 @@ export const mockHistory: PredictionRecord[] = [
     status: "archived",
     summaryCards: [
       { label: "Demanda Total Prevista", value: "2,350 uds", change: "+9.4%", positive: true },
-      { label: "Productos Críticos", value: "5", change: "+1", positive: false },
+      { label: "Productos Analizados", value: "44", change: "+2", positive: true },
       { label: "Precisión del Modelo", value: "92.7%", change: "+1.5%", positive: true },
-      { label: "Costo Estimado", value: "$17,800", change: "+3.6%", positive: false },
+      { label: "Horizonte de Predicción", value: "15 días", change: "", positive: true },
     ],
     chartData: generateChartData(15),
     products: [],
@@ -177,9 +181,9 @@ export const mockHistory: PredictionRecord[] = [
     status: "archived",
     summaryCards: [
       { label: "Demanda Total Prevista", value: "780 uds", change: "+3.2%", positive: true },
-      { label: "Productos Críticos", value: "2", change: "-2", positive: true },
+      { label: "Productos Analizados", value: "36", change: "+2", positive: true },
       { label: "Precisión del Modelo", value: "97.3%", change: "+3.4%", positive: true },
-      { label: "Costo Estimado", value: "$5,940", change: "-4.1%", positive: true },
+      { label: "Horizonte de Predicción", value: "7 días", change: "", positive: true },
     ],
     chartData: generateChartData(7),
     products: [],

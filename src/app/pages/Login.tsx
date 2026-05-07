@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Activity, Eye, EyeOff, ArrowRight, Lock, Mail, AlertCircle } from "lucide-react";
+import { Activity, Eye, EyeOff, ArrowRight, Lock, Mail, AlertCircle, TrendingUp, Package, BarChart3, CheckCircle, Clock } from "lucide-react";
 import { motion } from "motion/react";
 
 export function Login() {
@@ -75,29 +75,49 @@ export function Login() {
                 </span>
               </div>
 
-              <h2 className="text-gray-900 mb-4" style={{ fontSize: "2rem", fontWeight: 700, lineHeight: 1.2 }}>
-                Predicción inteligente para tu{" "}
-                <span className="text-cyan-500">farmacia</span>
+              <h2 className="text-gray-900 mb-3" style={{ fontSize: "1.875rem", fontWeight: 700, lineHeight: 1.2 }}>
+                Bienvenido a{" "}
+                <span className="text-cyan-500">PharmaCast</span>
               </h2>
-              <p className="text-gray-500 mb-10" style={{ fontSize: "0.9375rem", lineHeight: 1.7 }}>
-                Anticipa la demanda, optimiza tus compras y reduce el desabastecimiento con análisis de datos impulsado por IA.
+              <p className="text-gray-400 mb-8" style={{ fontSize: "0.875rem", lineHeight: 1.65 }}>
+                Tu historial de predicciones te espera. Continúa donde lo dejaste.
               </p>
 
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-4">
+              {/* Mini prediction history preview */}
+              <p className="text-gray-400 mb-3" style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Últimas predicciones
+              </p>
+              <div className="space-y-2.5">
                 {[
-                  { value: "94%", label: "Precisión" },
-                  { value: "< 2min", label: "Análisis" },
-                  { value: "50+", label: "Productos" },
-                ].map((s) => (
-                  <div key={s.label} className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-center">
-                    <p className="text-cyan-500 mb-1" style={{ fontSize: "1.25rem", fontWeight: 700 }}>
-                      {s.value}
-                    </p>
-                    <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
-                      {s.label}
-                    </p>
-                  </div>
+                  { id: "PC-2026-04", products: 127, accuracy: "94.2%", days: "3 días atrás", status: "completado" },
+                  { id: "PC-2026-03", products: 89, accuracy: "91.8%", days: "2 semanas atrás", status: "completado" },
+                  { id: "PC-2026-02", products: 143, accuracy: "93.1%", days: "1 mes atrás", status: "completado" },
+                ].map((p, i) => (
+                  <motion.div
+                    key={p.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: 0.2 + i * 0.1 }}
+                    className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3.5"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                      <CheckCircle className="h-4 w-4 text-cyan-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-800" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{p.id}</span>
+                        <span className="text-cyan-500 shrink-0" style={{ fontSize: "0.75rem", fontWeight: 700 }}>{p.accuracy}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="flex items-center gap-1 text-gray-400" style={{ fontSize: "0.6875rem" }}>
+                          <Package className="h-3 w-3" />{p.products} productos
+                        </span>
+                        <span className="flex items-center gap-1 text-gray-400" style={{ fontSize: "0.6875rem" }}>
+                          <Clock className="h-3 w-3" />{p.days}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             </motion.div>
@@ -180,13 +200,13 @@ export function Login() {
                 <label className="text-gray-700" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
                   Contraseña
                 </label>
-                <button
-                  type="button"
+                <Link
+                  to="/forgot-password"
                   className="text-cyan-500 hover:text-cyan-600 transition-colors"
                   style={{ fontSize: "0.8125rem" }}
                 >
                   ¿Olvidaste tu contraseña?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />

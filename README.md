@@ -1,7 +1,7 @@
 
-  # Dark-mode pharmacy prediction app
+  # TESIS
 
-  This is a code bundle for Dark-mode pharmacy prediction app. The original project is available at https://www.figma.com/design/Rubnt1E66pCk0oUX2SgHOZ/Dark-mode-pharmacy-prediction-app.
+  This is a code bundle for TESIS. The original project is available at https://www.figma.com/design/Rubnt1E66pCk0oUX2SgHOZ/TESIS.
 
   ## Running the code
 

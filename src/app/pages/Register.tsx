@@ -11,6 +11,10 @@ import {
   Building2,
   AlertCircle,
   CheckCircle2,
+  Upload,
+  Cpu,
+  BarChart3,
+  ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -120,31 +124,49 @@ export function Register() {
                 </span>
               </div>
 
-              <h2 className="text-gray-900 mb-4" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.25 }}>
-                Empieza a optimizar tu{" "}
-                <span className="text-cyan-500">farmacia hoy</span>
+              <h2 className="text-gray-900 mb-3" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.25 }}>
+                Así de fácil con{" "}
+                <span className="text-cyan-500">PharmaCast</span>
               </h2>
-              <p className="text-gray-500 mb-10" style={{ fontSize: "0.9rem", lineHeight: 1.7 }}>
-                Crea tu cuenta en minutos y accede a predicciones de demanda con inteligencia artificial.
+              <p className="text-gray-400 mb-8" style={{ fontSize: "0.875rem", lineHeight: 1.65 }}>
+                De tus datos de ventas a un plan de compras inteligente en 4 pasos.
               </p>
 
-              {/* Benefits */}
-              <div className="space-y-3">
+              {/* How it works — 4 steps */}
+              <div className="space-y-1">
                 {[
-                  "Predicciones de demanda con 94% de precisión",
-                  "Plan de compras automatizado y priorizado",
-                  "Análisis en menos de 2 minutos",
-                  "Sin costo adicional en el plan básico",
-                ].map((benefit) => (
-                  <div key={benefit} className="flex items-center gap-3">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-500/20 shrink-0">
-                      <CheckCircle2 className="h-3 w-3 text-cyan-500" />
-                    </div>
-                    <span className="text-gray-600" style={{ fontSize: "0.875rem" }}>
-                      {benefit}
-                    </span>
-                  </div>
-                ))}
+                  { step: "01", icon: Upload, label: "Carga tus datos", desc: "Sube CSV o Excel con ventas e inventario", color: "text-cyan-500", bg: "bg-cyan-500/10 border-cyan-500/20" },
+                  { step: "02", icon: Cpu, label: "Análisis IA", desc: "Pipeline ARIMA + ML ensemble en segundos", color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
+                  { step: "03", icon: BarChart3, label: "Visualiza resultados", desc: "Gráficas interactivas de demanda predicha", color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
+                  { step: "04", icon: ShoppingCart, label: "Plan de compras", desc: "Recomendaciones priorizadas listas para exportar", color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
+                ].map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <motion.div
+                      key={item.step}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.4, delay: 0.15 + i * 0.1 }}
+                      className="flex items-start gap-3.5"
+                    >
+                      {/* Left: icon + vertical line */}
+                      <div className="flex flex-col items-center">
+                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${item.bg}`}>
+                          <Icon className={`h-4.5 w-4.5 ${item.color}`} style={{ height: 18, width: 18 }} />
+                        </div>
+                        {i < 3 && <div className="w-px flex-1 bg-gray-100 my-1" style={{ minHeight: 16 }} />}
+                      </div>
+                      {/* Right: text */}
+                      <div className="pb-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-300" style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em" }}>{item.step}</span>
+                          <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{item.label}</span>
+                        </div>
+                        <p className="text-gray-400 mt-0.5" style={{ fontSize: "0.8125rem" }}>{item.desc}</p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </motion.div>
           </div>
@@ -378,13 +400,13 @@ export function Register() {
             {/* Terms */}
             <p className="text-gray-400 pt-1" style={{ fontSize: "0.8125rem", lineHeight: 1.6 }}>
               Al registrarte aceptas nuestros{" "}
-              <button type="button" className="text-cyan-500 hover:text-cyan-600 transition-colors">
+              <Link to="/terms" className="text-cyan-500 hover:text-cyan-600 transition-colors">
                 Términos de uso
-              </button>{" "}
+              </Link>{" "}
               y{" "}
-              <button type="button" className="text-cyan-500 hover:text-cyan-600 transition-colors">
+              <Link to="/terms" className="text-cyan-500 hover:text-cyan-600 transition-colors">
                 Política de privacidad
-              </button>
+              </Link>
               .
             </p>
 

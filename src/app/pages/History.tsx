@@ -9,16 +9,10 @@ import {
   Search,
   Filter,
   BarChart3,
-  Archive,
-  CheckCircle2,
+  Package,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { mockHistory } from "../data/mockData";
-
-const statusConfig = {
-  completed: { label: "Completado", icon: CheckCircle2, color: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20" },
-  archived: { label: "Archivado", icon: Archive, color: "text-gray-500", bg: "bg-gray-100", border: "border-gray-200" },
-};
 
 const periodLabel = (days: number) => `${days} días`;
 
@@ -26,7 +20,6 @@ export function History() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   const filtered = mockHistory.filter((rec) => {
     const matchSearch =
@@ -34,8 +27,7 @@ export function History() {
       rec.date.includes(search) ||
       rec.totalProducts.toString().includes(search);
     const matchPeriod = filterPeriod === "all" || rec.forecastPeriod.toString() === filterPeriod;
-    const matchStatus = filterStatus === "all" || rec.status === filterStatus;
-    return matchSearch && matchPeriod && matchStatus;
+    return matchSearch && matchPeriod;
   });
 
   const formatDate = (dateStr: string) =>
@@ -60,13 +52,13 @@ export function History() {
         </p>
       </div>
 
-      {/* Summary stats */}
+      {/* Summary stats — Precisión promedio is 4th */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[
           { label: "Total predicciones", value: mockHistory.length.toString(), icon: BarChart3, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Precisión promedio", value: `${avgAccuracy.toFixed(1)}%`, icon: TrendingUp, color: "text-cyan-500", bg: "bg-cyan-500/10" },
-          { label: "Productos analizados", value: "51", icon: Archive, color: "text-purple-500", bg: "bg-purple-500/10" },
+          { label: "Productos analizados", value: mockHistory.reduce((s, r) => s + r.totalProducts, 0).toString(), icon: Package, color: "text-purple-500", bg: "bg-purple-500/10" },
           { label: "Items críticos total", value: mockHistory.reduce((s, r) => s + r.criticalItems, 0).toString(), icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10" },
+          { label: "Precisión promedio", value: `${avgAccuracy.toFixed(1)}%`, icon: TrendingUp, color: "text-cyan-500", bg: "bg-cyan-500/10" },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
@@ -100,7 +92,7 @@ export function History() {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-gray-400" />
           <div className="flex gap-1.5">
-            {["all", "7", "15", "30"].map((p) => (
+            {["all", "15", "30", "60"].map((p) => (
               <button
                 key={p}
                 onClick={() => setFilterPeriod(p)}
@@ -115,24 +107,6 @@ export function History() {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Status filter */}
-        <div className="flex gap-1.5">
-          {["all", "completed", "archived"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className={`rounded-lg border px-3 py-2 transition-all ${
-                filterStatus === s
-                  ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-500"
-                  : "border-gray-300 bg-white text-gray-500 hover:text-gray-700"
-              }`}
-              style={{ fontSize: "0.8125rem" }}
-            >
-              {s === "all" ? "Todos" : s === "completed" ? "Completados" : "Archivados"}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -154,105 +128,83 @@ export function History() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((record, i) => {
-            const sConf = statusConfig[record.status];
-            const StatusIcon = sConf.icon;
-            return (
-              <motion.button
-                key={record.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.06 }}
-                onClick={() => navigate(`/history/${record.id}`)}
-                className="text-left rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-md transition-all group shadow-sm"
-              >
-                {/* Card header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <p className="text-gray-400 mb-1" style={{ fontSize: "0.75rem" }}>
-                      ID: {record.id}
+          {filtered.map((record, i) => (
+            <motion.button
+              key={record.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.06 }}
+              onClick={() => navigate(`/history/${record.id}`)}
+              className="text-left rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-md transition-all group shadow-sm"
+            >
+              {/* Card header */}
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-gray-400 mb-1" style={{ fontSize: "0.75rem" }}>
+                    ID: {record.id}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                    <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
+                      {formatDate(record.date)}
                     </p>
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                      <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
-                        {formatDate(record.date)}
-                      </p>
-                    </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${sConf.bg} ${sConf.border} ${sConf.color}`}
-                    style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
-                    <StatusIcon className="h-3 w-3" />
-                    {sConf.label}
-                  </span>
                 </div>
+              </div>
 
-                {/* Metrics */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
-                    <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Período</p>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-cyan-500" />
-                      <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
-                        {periodLabel(record.forecastPeriod)}
-                      </span>
-                    </div>
+              {/* Metrics with labels */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+                  <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Período</p>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-cyan-500" />
+                    <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                      {periodLabel(record.forecastPeriod)}
+                    </span>
                   </div>
-                  <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
-                    <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Precisión</p>
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="h-3 w-3 text-cyan-500" />
-                      <span className="text-cyan-500" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
-                        {record.accuracy}%
-                      </span>
-                    </div>
+                </div>
+                <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+                  <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Precisión</p>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-cyan-500" />
+                    <span className="text-cyan-500" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                      {record.accuracy}%
+                    </span>
                   </div>
-                  <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
-                    <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Productos</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+                  <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Productos</p>
+                  <div className="flex items-center gap-1.5">
+                    <Package className="h-3.5 w-3.5 text-blue-500" />
                     <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
                       {record.totalProducts}
                     </span>
                   </div>
-                  <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
-                    <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Críticos</p>
-                    <div className="flex items-center gap-1">
-                      {record.criticalItems > 0 && <AlertCircle className="h-3 w-3 text-red-400" />}
-                      <span className={record.criticalItems > 0 ? "text-red-400" : "text-gray-500"}
-                        style={{ fontSize: "0.875rem", fontWeight: 600 }}>
-                        {record.criticalItems}
-                      </span>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Accuracy bar */}
-                <div className="mb-4">
-                  <div className="flex justify-between mb-1.5">
-                    <span className="text-gray-400" style={{ fontSize: "0.6875rem" }}>Precisión del modelo</span>
-                    <span className="text-cyan-500" style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
-                      {record.accuracy}%
+                <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+                  <p className="text-gray-400 mb-1" style={{ fontSize: "0.6875rem" }}>Críticos</p>
+                  <div className="flex items-center gap-1.5">
+                    {record.criticalItems > 0 && <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
+                    <span className={record.criticalItems > 0 ? "text-red-400" : "text-gray-500"}
+                      style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                      {record.criticalItems}
                     </span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400"
-                      style={{ width: `${record.accuracy}%` }}
-                    />
-                  </div>
                 </div>
+              </div>
 
-                {/* Units */}
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <span className="text-gray-400" style={{ fontSize: "0.75rem" }}>
-                    {record.totalUnits.toLocaleString()} unidades predichas
-                  </span>
-                  <div className="flex items-center gap-1 text-gray-400 group-hover:text-cyan-500 transition-colors">
-                    <span style={{ fontSize: "0.75rem" }}>Ver detalles</span>
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </div>
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="text-gray-400" style={{ fontSize: "0.75rem" }}>
+                  {record.totalUnits.toLocaleString()} unidades predichas
+                </span>
+                <div className="flex items-center gap-1 text-gray-400 group-hover:text-cyan-500 transition-colors">
+                  <span style={{ fontSize: "0.75rem" }}>Ver detalles</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </div>
-              </motion.button>
-            );
-          })}
+              </div>
+            </motion.button>
+          ))}
         </div>
       )}
     </div>
