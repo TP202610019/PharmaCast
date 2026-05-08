@@ -11,12 +11,11 @@ import {
   Building2,
   AlertCircle,
   CheckCircle2,
-  Upload,
-  Cpu,
-  BarChart3,
+  Clock,
   ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useAuth } from "../context/AuthContext";
 
 const passwordRequirements = [
   { label: "Al menos 8 caracteres", test: (p: string) => p.length >= 8 },
@@ -26,6 +25,7 @@ const passwordRequirements = [
 
 export function Register() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [form, setForm] = useState({
     name: "",
     pharmacy: "",
@@ -45,7 +45,6 @@ export function Register() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
     if (!form.name || !form.email || !form.password || !form.confirmPassword) {
       setError("Por favor completa todos los campos obligatorios.");
       return;
@@ -58,16 +57,15 @@ export function Register() {
       setError("La contraseña debe tener al menos 8 caracteres.");
       return;
     }
-
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      navigate("/");
+      login({ name: form.name, email: form.email, pharmacy: form.pharmacy || "Mi Farmacia" });
+      navigate("/dashboard");
     }, 1400);
   };
 
   const passwordStrength = passwordRequirements.filter((r) => r.test(form.password)).length;
-
   const strengthLabel = ["Débil", "Regular", "Fuerte"][passwordStrength - 1] ?? "";
   const strengthColor =
     passwordStrength === 3
@@ -79,106 +77,85 @@ export function Register() {
       : "bg-gray-200";
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-5/12 flex-col relative overflow-hidden bg-white border-r border-gray-100">
-        {/* Decorative grid */}
+    <div className="min-h-screen flex">
+      {/* ── LEFT: solid cyan panel ── */}
+      <div className="hidden lg:flex lg:w-5/12 flex-col relative overflow-hidden bg-cyan-500">
+        {/* Decorative circles */}
+        <div className="absolute -top-28 -right-28 w-72 h-72 rounded-full bg-white/5" />
+        <div className="absolute top-1/3 -left-20 w-60 h-60 rounded-full bg-white/[0.07]" />
+        <div className="absolute -bottom-24 right-8 w-64 h-64 rounded-full bg-white/5" />
+        {/* Subtle grid */}
         <div
-          className="absolute inset-0 opacity-[0.04]"
+          className="absolute inset-0 opacity-[0.06]"
           style={{
             backgroundImage:
-              "linear-gradient(#06b6d4 1px, transparent 1px), linear-gradient(to right, #06b6d4 1px, transparent 1px)",
+              "linear-gradient(white 1px, transparent 1px), linear-gradient(to right, white 1px, transparent 1px)",
             backgroundSize: "40px 40px",
           }}
         />
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-cyan-500/6 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col h-full p-12">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group w-fit">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 group-hover:bg-cyan-500/20 transition-colors">
-              <Activity className="h-5 w-5 text-cyan-500" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 border border-white/25 group-hover:bg-white/25 transition-colors">
+              <Activity className="h-5 w-5 text-white" />
             </div>
             <div className="flex flex-col leading-none">
-              <span className="text-gray-900 tracking-tight" style={{ fontSize: "0.9375rem", fontWeight: 700 }}>
+              <span className="text-white tracking-tight" style={{ fontSize: "0.9375rem", fontWeight: 700 }}>
                 PharmaCast
               </span>
-              <span className="text-gray-400" style={{ fontSize: "0.6rem", fontWeight: 400, letterSpacing: "0.1em" }}>
+              <span className="text-white/50" style={{ fontSize: "0.6rem", fontWeight: 400, letterSpacing: "0.1em" }}>
                 PREDICTION SYSTEM
               </span>
             </div>
           </Link>
 
-          {/* Center content */}
+          {/* Center message */}
           <div className="flex-1 flex flex-col justify-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
             >
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 mb-6">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                <span className="text-cyan-600" style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
-                  Registro gratuito
-                </span>
-              </div>
 
-              <h2 className="text-gray-900 mb-3" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.25 }}>
-                Así de fácil con{" "}
-                <span className="text-cyan-500">PharmaCast</span>
+              <p className="text-white/60 mb-2" style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Sistema de soporte de decisiones
+              </p>
+              <h2 className="text-white mb-5" style={{ fontSize: "1.875rem", fontWeight: 700, lineHeight: 1.2 }}>
+                Predice. Planifica.<br />Optimiza.
               </h2>
-              <p className="text-gray-400 mb-8" style={{ fontSize: "0.875rem", lineHeight: 1.65 }}>
-                De tus datos de ventas a un plan de compras inteligente en 4 pasos.
+              <p className="text-white/65 mb-8" style={{ fontSize: "0.9375rem", lineHeight: 1.75 }}>
+                Predecir la demanda y planificar las compras de la farmacia en minutos, sin reemplazar tu sistema de gestión actual.
               </p>
 
-              {/* How it works — 4 steps */}
-              <div className="space-y-1">
+              <div className="space-y-3">
                 {[
-                  { step: "01", icon: Upload, label: "Carga tus datos", desc: "Sube CSV o Excel con ventas e inventario", color: "text-cyan-500", bg: "bg-cyan-500/10 border-cyan-500/20" },
-                  { step: "02", icon: Cpu, label: "Análisis IA", desc: "Pipeline ARIMA + ML ensemble en segundos", color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
-                  { step: "03", icon: BarChart3, label: "Visualiza resultados", desc: "Gráficas interactivas de demanda predicha", color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
-                  { step: "04", icon: ShoppingCart, label: "Plan de compras", desc: "Recomendaciones priorizadas listas para exportar", color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
-                ].map((item, i) => {
+                  { icon: Clock, text: "Predicción a 30 / 60 / 90 días" },
+                  { icon: ShoppingCart, text: "Plan priorizado por criticidad" },
+                  { icon: CheckCircle2, text: "Compatible con tu sistema actual" },
+                ].map((item) => {
                   const Icon = item.icon;
                   return (
-                    <motion.div
-                      key={item.step}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.4, delay: 0.15 + i * 0.1 }}
-                      className="flex items-start gap-3.5"
-                    >
-                      {/* Left: icon + vertical line */}
-                      <div className="flex flex-col items-center">
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${item.bg}`}>
-                          <Icon className={`h-4.5 w-4.5 ${item.color}`} style={{ height: 18, width: 18 }} />
-                        </div>
-                        {i < 3 && <div className="w-px flex-1 bg-gray-100 my-1" style={{ minHeight: 16 }} />}
+                    <div key={item.text} className="flex items-center gap-3">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 border border-white/15 shrink-0">
+                        <Icon className="h-3.5 w-3.5 text-white" />
                       </div>
-                      {/* Right: text */}
-                      <div className="pb-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-300" style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em" }}>{item.step}</span>
-                          <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{item.label}</span>
-                        </div>
-                        <p className="text-gray-400 mt-0.5" style={{ fontSize: "0.8125rem" }}>{item.desc}</p>
-                      </div>
-                    </motion.div>
+                      <span className="text-white/80" style={{ fontSize: "0.875rem" }}>{item.text}</span>
+                    </div>
                   );
                 })}
               </div>
             </motion.div>
           </div>
 
-          <p className="text-gray-300" style={{ fontSize: "0.75rem" }}>
+          <p className="text-white/35" style={{ fontSize: "0.75rem" }}>
             © 2026 PharmaCast · Todos los derechos reservados
           </p>
         </div>
       </div>
 
-      {/* Right panel — form */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 overflow-y-auto">
+      {/* ── RIGHT: pure white form panel ── */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 bg-white overflow-y-auto">
         {/* Mobile logo */}
         <div className="lg:hidden mb-8">
           <Link to="/" className="flex items-center gap-2.5">
@@ -197,19 +174,19 @@ export function Register() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
-          {/* Header */}
           <div className="mb-7">
-            <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.75rem", fontWeight: 700 }}>
-              Crear cuenta
+            <p className="text-cyan-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>
+              CREAR CUENTA
+            </p>
+            <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.875rem", fontWeight: 700 }}>
+              Registrarse
             </h1>
             <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>
-              Completa el formulario para registrarte
+              Crea una cuenta para guardar tus predicciones y exportar planes.
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Error */}
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
@@ -217,13 +194,10 @@ export function Register() {
                 className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3"
               >
                 <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                <p className="text-red-600" style={{ fontSize: "0.875rem" }}>
-                  {error}
-                </p>
+                <p className="text-red-600" style={{ fontSize: "0.875rem" }}>{error}</p>
               </motion.div>
             )}
 
-            {/* Name + Pharmacy row */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
@@ -241,7 +215,6 @@ export function Register() {
                   />
                 </div>
               </div>
-
               <div className="space-y-1.5">
                 <label className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                   Farmacia
@@ -260,7 +233,6 @@ export function Register() {
               </div>
             </div>
 
-            {/* Email */}
             <div className="space-y-1.5">
               <label className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                 Correo electrónico <span className="text-red-400">*</span>
@@ -278,7 +250,6 @@ export function Register() {
               </div>
             </div>
 
-            {/* Password */}
             <div className="space-y-1.5">
               <label className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                 Contraseña <span className="text-red-400">*</span>
@@ -303,8 +274,6 @@ export function Register() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-
-              {/* Password strength */}
               {(passwordFocused || form.password.length > 0) && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -338,9 +307,7 @@ export function Register() {
                       const met = req.test(form.password);
                       return (
                         <div key={req.label} className="flex items-center gap-1.5">
-                          <CheckCircle2
-                            className={`h-3 w-3 transition-colors ${met ? "text-cyan-500" : "text-gray-300"}`}
-                          />
+                          <CheckCircle2 className={`h-3 w-3 transition-colors ${met ? "text-cyan-500" : "text-gray-300"}`} />
                           <span
                             className={`transition-colors ${met ? "text-gray-600" : "text-gray-400"}`}
                             style={{ fontSize: "0.75rem" }}
@@ -355,7 +322,6 @@ export function Register() {
               )}
             </div>
 
-            {/* Confirm password */}
             <div className="space-y-1.5">
               <label className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                 Confirmar contraseña <span className="text-red-400">*</span>
@@ -385,9 +351,7 @@ export function Register() {
                 </button>
               </div>
               {form.confirmPassword && form.confirmPassword !== form.password && (
-                <p className="text-red-500" style={{ fontSize: "0.75rem" }}>
-                  Las contraseñas no coinciden
-                </p>
+                <p className="text-red-500" style={{ fontSize: "0.75rem" }}>Las contraseñas no coinciden</p>
               )}
               {form.confirmPassword && form.confirmPassword === form.password && (
                 <p className="text-cyan-500 flex items-center gap-1" style={{ fontSize: "0.75rem" }}>
@@ -397,7 +361,6 @@ export function Register() {
               )}
             </div>
 
-            {/* Terms */}
             <p className="text-gray-400 pt-1" style={{ fontSize: "0.8125rem", lineHeight: 1.6 }}>
               Al registrarte aceptas nuestros{" "}
               <Link to="/terms" className="text-cyan-500 hover:text-cyan-600 transition-colors">
@@ -410,7 +373,6 @@ export function Register() {
               .
             </p>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -434,7 +396,6 @@ export function Register() {
             </button>
           </form>
 
-          {/* Login link */}
           <p className="text-center text-gray-500 mt-6" style={{ fontSize: "0.9375rem" }}>
             ¿Ya tienes una cuenta?{" "}
             <Link

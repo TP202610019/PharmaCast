@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { Root } from "./components/Root";
 import { Home } from "./pages/Home";
+import { Dashboard } from "./pages/Dashboard";
 import { PredictionFlow } from "./pages/PredictionFlow";
 import { History } from "./pages/History";
 import { HistoryDetail } from "./pages/HistoryDetail";
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
     Component: Root,
     children: [
       { index: true, Component: Home },
+      { path: "dashboard", Component: Dashboard },
       { path: "prediction", Component: PredictionFlow },
       { path: "history", Component: History },
       { path: "history/:id", Component: HistoryDetail },

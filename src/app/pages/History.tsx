@@ -55,19 +55,21 @@ export function History() {
       {/* Summary stats — Precisión promedio is 4th */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Total predicciones", value: mockHistory.length.toString(), icon: BarChart3, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Productos analizados", value: mockHistory.reduce((s, r) => s + r.totalProducts, 0).toString(), icon: Package, color: "text-purple-500", bg: "bg-purple-500/10" },
-          { label: "Items críticos total", value: mockHistory.reduce((s, r) => s + r.criticalItems, 0).toString(), icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10" },
-          { label: "Precisión promedio", value: `${avgAccuracy.toFixed(1)}%`, icon: TrendingUp, color: "text-cyan-500", bg: "bg-cyan-500/10" },
+          { label: "Total predicciones", value: mockHistory.length.toString(), icon: BarChart3, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
+          { label: "Productos analizados", value: mockHistory.reduce((s, r) => s + r.totalProducts, 0).toString(), icon: Package, color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
+          { label: "Items críticos total", value: mockHistory.reduce((s, r) => s + r.criticalItems, 0).toString(), icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10 border-red-500/20" },
+          { label: "Precisión promedio", value: `${avgAccuracy.toFixed(1)}%`, icon: TrendingUp, color: "text-cyan-500", bg: "bg-cyan-500/10 border-cyan-500/20" },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
-            <div key={stat.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg} mb-3`}>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
+            <div key={stat.label} className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${stat.bg}`}>
+                <Icon className={`h-6 w-6 ${stat.color}`} />
               </div>
-              <p className="text-gray-900" style={{ fontSize: "1.375rem", fontWeight: 700 }}>{stat.value}</p>
-              <p className="text-gray-400 mt-0.5" style={{ fontSize: "0.75rem" }}>{stat.label}</p>
+              <div>
+                <p className="text-gray-400 mb-0.5" style={{ fontSize: "0.75rem" }}>{stat.label}</p>
+                <p className="text-gray-900" style={{ fontSize: "1.375rem", fontWeight: 700, lineHeight: 1.1 }}>{stat.value}</p>
+              </div>
             </div>
           );
         })}
@@ -92,7 +94,7 @@ export function History() {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-gray-400" />
           <div className="flex gap-1.5">
-            {["all", "15", "30", "60"].map((p) => (
+            {["all", "30", "60", "90"].map((p) => (
               <button
                 key={p}
                 onClick={() => setFilterPeriod(p)}
