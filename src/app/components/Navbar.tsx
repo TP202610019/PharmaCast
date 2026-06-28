@@ -34,9 +34,9 @@ export function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleLogoutConfirm = () => {
-    logout();
+  const handleLogoutConfirm = async () => {
     setShowLogoutModal(false);
+    await logout();
     navigate("/login");
   };
 

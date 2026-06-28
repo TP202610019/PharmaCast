@@ -5,18 +5,18 @@ import {
   CheckCircle2, Clock, ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
 
 export function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginDemo } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
@@ -24,13 +24,19 @@ export function Login() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // Extract name from email as demo
-      const namePart = email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-      login({ name: namePart, email, pharmacy: "Mi Farmacia" });
+    try {
+      await login(email, password);
       navigate("/dashboard");
-    }, 1200);
+    } catch (err) {
+      setError(extractApiErrorMessage(err, "Correo o contraseña incorrectos."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDemo = () => {
+    loginDemo();
+    navigate("/dashboard");
   };
 
   return (
@@ -74,7 +80,6 @@ export function Login() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
             >
-
               <p className="text-white/60 mb-2" style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                 Sistema de soporte de decisiones
               </p>
@@ -236,10 +241,7 @@ export function Login() {
 
           <button
             type="button"
-            onClick={() => {
-              login({ name: "Dr. Demo", email: "demo@pharmacast.com", pharmacy: "Farmacia PharmaCast" });
-              navigate("/dashboard");
-            }}
+            onClick={handleDemo}
             className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-3 text-gray-600 transition-all hover:border-gray-400 hover:text-gray-900 hover:shadow-sm"
             style={{ fontSize: "0.9375rem" }}
           >
