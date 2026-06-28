@@ -15,7 +15,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
 
 const passwordRequirements = [
   { label: "Al menos 8 caracteres", test: (p: string) => p.length >= 8 },
@@ -25,7 +25,7 @@ const passwordRequirements = [
 
 export function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const [form, setForm] = useState({
     name: "",
     pharmacy: "",
@@ -42,9 +42,10 @@ export function Register() {
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
     if (!form.name || !form.email || !form.password || !form.confirmPassword) {
       setError("Por favor completa todos los campos obligatorios.");
       return;
@@ -57,12 +58,24 @@ export function Register() {
       setError("La contraseña debe tener al menos 8 caracteres.");
       return;
     }
+    if (!/[A-Z]/.test(form.password)) {
+      setError("La contraseña debe incluir al menos una letra mayúscula.");
+      return;
+    }
+    if (!/[0-9]/.test(form.password)) {
+      setError("La contraseña debe incluir al menos un número.");
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      login({ name: form.name, email: form.email, pharmacy: form.pharmacy || "Mi Farmacia" });
+    try {
+      await register(form.name, form.email, form.password, form.pharmacy || "Mi Farmacia");
       navigate("/dashboard");
-    }, 1400);
+    } catch (err) {
+      setError(extractApiErrorMessage(err, "No se pudo crear la cuenta. Intenta de nuevo."));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const passwordStrength = passwordRequirements.filter((r) => r.test(form.password)).length;
@@ -80,11 +93,9 @@ export function Register() {
     <div className="min-h-screen flex">
       {/* ── LEFT: solid cyan panel ── */}
       <div className="hidden lg:flex lg:w-5/12 flex-col relative overflow-hidden bg-cyan-500">
-        {/* Decorative circles */}
         <div className="absolute -top-28 -right-28 w-72 h-72 rounded-full bg-white/5" />
         <div className="absolute top-1/3 -left-20 w-60 h-60 rounded-full bg-white/[0.07]" />
         <div className="absolute -bottom-24 right-8 w-64 h-64 rounded-full bg-white/5" />
-        {/* Subtle grid */}
         <div
           className="absolute inset-0 opacity-[0.06]"
           style={{
@@ -95,7 +106,6 @@ export function Register() {
         />
 
         <div className="relative z-10 flex flex-col h-full p-12">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group w-fit">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 border border-white/25 group-hover:bg-white/25 transition-colors">
               <Activity className="h-5 w-5 text-white" />
@@ -110,14 +120,12 @@ export function Register() {
             </div>
           </Link>
 
-          {/* Center message */}
           <div className="flex-1 flex flex-col justify-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
             >
-
               <p className="text-white/60 mb-2" style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                 Sistema de soporte de decisiones
               </p>
@@ -154,9 +162,8 @@ export function Register() {
         </div>
       </div>
 
-      {/* ── RIGHT: pure white form panel ── */}
+      {/* ── RIGHT: form panel ── */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 bg-white overflow-y-auto">
-        {/* Mobile logo */}
         <div className="lg:hidden mb-8">
           <Link to="/" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30">
@@ -290,11 +297,7 @@ export function Register() {
                     {strengthLabel && (
                       <span
                         className={`${
-                          passwordStrength === 3
-                            ? "text-cyan-500"
-                            : passwordStrength === 2
-                            ? "text-yellow-500"
-                            : "text-red-400"
+                          passwordStrength === 3 ? "text-cyan-500" : passwordStrength === 2 ? "text-yellow-500" : "text-red-400"
                         }`}
                         style={{ fontSize: "0.75rem", fontWeight: 500 }}
                       >
