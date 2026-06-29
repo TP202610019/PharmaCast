@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { downloadCsv, downloadPdf } from "../../lib/exportUtils";
 import { dashboardService } from "../../services/dashboard.service";
 import { purchasePlanService } from "../../services/purchase-plan.service";
 import { datasetService } from "../../services/dataset.service";
@@ -106,6 +107,9 @@ export function HistoryDetail() {
   const [chartLoading, setChartLoading] = useState(false);
   const chartCache = useRef<Map<string, ChartPoint[]>>(new Map());
 
+  // ── Export ──
+  const [exportLoading, setExportLoading] = useState(false);
+
   // ── UI ──
   const [activeTab, setActiveTab] = useState<"dashboard" | "purchase" | "evaluation">("dashboard");
   const [showConfidence, setShowConfidence] = useState(true);
@@ -162,7 +166,31 @@ export function HistoryDetail() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-
+  async function handleExport(format: "csv" | "pdf") {
+    if (!id) return;
+    setExportLoading(true);
+    try {
+      const all = await dashboardService.getProducts(id, 1, 9999);
+      const headers = ["Producto", "Cant. Total Prevista (uds)", "Cant. Diaria (uds)", "Prioridad"];
+      const rows = all.items.map((p) => [
+        p.productName,
+        Math.round(p.totalPredictedQuantity),
+        p.avgPredictedQuantity.toFixed(1),
+        priorityConfig[p.priority].label,
+      ]);
+      const filename = `plan-compras-${new Date().toISOString().slice(0, 10)}`;
+      if (format === "csv") {
+        downloadCsv(`${filename}.csv`, headers, rows);
+      } else {
+        const subtitle = summary?.forecastPeriod
+          ? `Predicción para los próximos ${summary.forecastPeriod} días — generado el ${new Date().toLocaleDateString("es-ES")}`
+          : `Generado el ${new Date().toLocaleDateString("es-ES")}`;
+        downloadPdf(`${filename}.pdf`, "Plan de compras recomendado", subtitle, headers, rows);
+      }
+    } finally {
+      setExportLoading(false);
+    }
+  }
 
   // ── Load purchase plan ID when purchase or evaluation tab opens ──
   useEffect(() => {
@@ -435,14 +463,20 @@ export function HistoryDetail() {
         </div>
 
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+          <button
+            onClick={() => handleExport("csv")}
+            disabled={exportLoading}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontSize: "0.8125rem" }}>
-            <Download className="h-4 w-4" />
+            {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Exportar CSV
           </button>
-          <button className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all"
+          <button
+            onClick={() => handleExport("pdf")}
+            disabled={exportLoading}
+            className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-            <Download className="h-4 w-4" />
+            {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Exportar PDF
           </button>
         </div>
