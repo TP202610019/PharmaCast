@@ -17,7 +17,7 @@ export interface ChartPoint {
   lower: number | null;
 }
 
-// ─── UI product type (mirrors mockData.PurchasePlanItem for chart/table compat) ─
+// ─── UI product type ──────────────────────────────────────────────────────────
 
 export interface UIProduct {
   id: string;
