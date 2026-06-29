@@ -1,14 +1,14 @@
 import { createBrowserRouter } from "react-router";
-import { Root } from "./components/Root";
-import { Home } from "./pages/Home";
-import { Dashboard } from "./pages/Dashboard";
-import { PredictionFlow } from "./pages/PredictionFlow";
-import { History } from "./pages/History";
-import { HistoryDetail } from "./pages/HistoryDetail";
-import { Login } from "./pages/Login";
-import { Register } from "./pages/Register";
-import { ForgotPassword } from "./pages/ForgotPassword";
-import { Terms } from "./pages/Terms";
+import { Root } from "@/shared/components/Root";
+import { Home } from "@/features/auth/pages/Home";
+import { Dashboard } from "@/features/dashboard/pages/Dashboard";
+import { PredictionFlow } from "@/features/prediction/pages/PredictionFlow";
+import { History } from "@/features/history/pages/History";
+import { HistoryDetail } from "@/features/history/pages/HistoryDetail";
+import { Login } from "@/features/auth/pages/Login";
+import { Register } from "@/features/auth/pages/Register";
+import { ForgotPassword } from "@/features/auth/pages/ForgotPassword";
+import { Terms } from "@/features/auth/pages/Terms";
 
 function NotFound() {
   return (

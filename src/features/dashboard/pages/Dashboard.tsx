@@ -11,19 +11,19 @@ import {
   ResponsiveContainer, ReferenceLine, Legend,
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
-import { useAuth } from "../context/AuthContext";
-import { dashboardService } from "../../services/dashboard.service";
+import { useAuth } from "@/shared/context/AuthContext";
+import { dashboardService } from "@/shared/services/dashboard.service";
 import {
   buildChartFromBackendPoints,
   relativeTime,
   type ChartPoint,
-} from "../../lib/transforms";
+} from "@/shared/lib/transforms";
 import type {
   DashboardMetricsResponse,
   DashboardSummaryResponse,
   DashboardProductRow,
   PagedResult,
-} from "../../types/api";
+} from "@/shared/types/api";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const priorityConfig = {

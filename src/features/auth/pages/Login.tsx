@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
+import { useAuth, extractApiErrorMessage } from "@/shared/context/AuthContext";
 
 export function Login() {
   const navigate = useNavigate();

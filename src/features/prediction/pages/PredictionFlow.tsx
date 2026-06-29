@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { downloadCsv, downloadPdf } from "../../lib/exportUtils";
+import { downloadCsv, downloadPdf } from "@/shared/lib/exportUtils";
 import { useNavigate } from "react-router";
 import {
   Upload,
@@ -41,10 +41,10 @@ import {
   ReferenceLine,
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
-import { datasetService } from "../../services/dataset.service";
-import { mappingService, mappingFieldService } from "../../services/mapping.service";
-import { predictionService } from "../../services/prediction.service";
-import { purchasePlanService } from "../../services/purchase-plan.service";
+import { datasetService } from "@/shared/services/dataset.service";
+import { mappingService, mappingFieldService } from "@/shared/services/mapping.service";
+import { predictionService } from "@/shared/services/prediction.service";
+import { purchasePlanService } from "@/shared/services/purchase-plan.service";
 import {
   forecastResultsToProducts,
   buildProductChartData,
@@ -52,10 +52,10 @@ import {
   extractAccuracy,
   type UIProduct,
   type ChartPoint,
-} from "../../lib/transforms";
-import type { PredictionResponse, PurchasePlanResponse, MappingFieldResponse } from "../../types/api";
-import { ExecutionStatus } from "../../types/api";
-import { extractApiErrorMessage } from "../context/AuthContext";
+} from "@/shared/lib/transforms";
+import type { PredictionResponse, PurchasePlanResponse, MappingFieldResponse } from "@/shared/types/api";
+import { ExecutionStatus } from "@/shared/types/api";
+import { extractApiErrorMessage } from "@/shared/context/AuthContext";
 
 /* ── Constants ── */
 const STEPS = [

@@ -16,11 +16,11 @@ import {
   Database,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { predictionService } from "../../services/prediction.service";
-import { summaryToUIRecord, statusLabel, relativeTime } from "../../lib/transforms";
-import type { PredictionUIRecord } from "../../lib/transforms";
-import { ExecutionStatus } from "../../types/api";
-import { extractApiErrorMessage } from "../context/AuthContext";
+import { predictionService } from "@/shared/services/prediction.service";
+import { summaryToUIRecord, statusLabel, relativeTime } from "@/shared/lib/transforms";
+import type { PredictionUIRecord } from "@/shared/lib/transforms";
+import { ExecutionStatus } from "@/shared/types/api";
+import { extractApiErrorMessage } from "@/shared/context/AuthContext";
 
 const statusConfig = {
   [ExecutionStatus.Completed]: {

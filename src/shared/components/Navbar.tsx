@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { Activity, LogIn, LogOut, Menu, X, AlertTriangle, Settings, ChevronDown, Building2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/shared/context/AuthContext";
 import { SettingsModal } from "./SettingsModal";
 
 const authLinks = [

@@ -11,18 +11,18 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { downloadCsv, downloadPdf } from "../../lib/exportUtils";
-import { dashboardService } from "../../services/dashboard.service";
-import { purchasePlanService } from "../../services/purchase-plan.service";
-import { datasetService } from "../../services/dataset.service";
-import { buildChartFromBackendPoints, type ChartPoint } from "../../lib/transforms";
+import { downloadCsv, downloadPdf } from "@/shared/lib/exportUtils";
+import { dashboardService } from "@/shared/services/dashboard.service";
+import { purchasePlanService } from "@/shared/services/purchase-plan.service";
+import { datasetService } from "@/shared/services/dataset.service";
+import { buildChartFromBackendPoints, type ChartPoint } from "@/shared/lib/transforms";
 import type {
   DashboardSummaryResponse,
   DashboardProductRow,
   PagedResult,
   PlanEvaluationResponse,
-} from "../../types/api";
-import { extractApiErrorMessage } from "../context/AuthContext";
+} from "@/shared/types/api";
+import { extractApiErrorMessage } from "@/shared/context/AuthContext";
 
 const priorityConfig = {
   critical: { label: "Crítico", color: "text-red-500",    bg: "bg-red-500/10",    border: "border-red-500/30",    dot: "bg-red-500"    },

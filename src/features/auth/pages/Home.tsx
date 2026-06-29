@@ -12,8 +12,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useAuth } from "../context/AuthContext";
-import { LoginRequiredModal } from "../components/LoginRequiredModal";
+import { useAuth } from "@/shared/context/AuthContext";
+import { LoginRequiredModal } from "@/shared/components/LoginRequiredModal";
 
 const features = [
   {

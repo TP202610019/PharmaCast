@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { authService } from "../../services/auth.service";
-import { setTokens, clearTokens, getAccessToken, getRefreshToken, STORAGE } from "../../lib/http";
-import { invalidateDashboardCache } from "../../lib/dashboardCache";
-import type { ApiError } from "../../types/api";
+import { authService } from "@/shared/services/auth.service";
+import { setTokens, clearTokens, getAccessToken, getRefreshToken, STORAGE } from "@/shared/lib/http";
+import { invalidateDashboardCache } from "@/shared/lib/dashboardCache";
+import type { ApiError } from "@/shared/types/api";
 
 export interface UserData {
   id: string;

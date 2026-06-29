@@ -5,7 +5,7 @@ import {
   Save, ChevronRight, Settings2, ShoppingCart, Package,
   Pencil, AlertCircle,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/shared/context/AuthContext";
 
 interface Props { open: boolean; onClose: () => void; }
 

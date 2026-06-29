@@ -15,7 +15,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
+import { useAuth, extractApiErrorMessage } from "@/shared/context/AuthContext";
 
 const passwordRequirements = [
   { label: "Al menos 8 caracteres", test: (p: string) => p.length >= 8 },
