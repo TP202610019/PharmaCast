@@ -35,7 +35,11 @@ const priorityConfig = {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
-  const filtered = payload.filter((p: any) => p.value != null && p.name !== "upper" && p.name !== "lower");
+  const hasPredicted = payload.some((p: any) => p.name === "predicted" && p.value != null);
+  const filtered = payload.filter((p: any) =>
+    p.value != null && p.name !== "upper" && p.name !== "lower" &&
+    !(p.name === "historical" && hasPredicted)
+  );
   if (!filtered.length) return null;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
@@ -58,6 +62,19 @@ const PAGE = 10;
 function Paginator({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / pageSize);
   if (totalPages <= 1) return null;
+
+  const pages: (number | "...")[] = [];
+  const delta = 1;
+  const range: number[] = [];
+  for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) range.push(i);
+  pages.push(1);
+  if (range[0] > 2) pages.push("...");
+  pages.push(...range);
+  if (range[range.length - 1] < totalPages - 1) pages.push("...");
+  if (totalPages > 1) pages.push(totalPages);
+
+  const btnBase = "flex h-7 min-w-[1.75rem] items-center justify-center rounded-lg border px-1 transition-all";
+
   return (
     <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
       <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
@@ -65,18 +82,22 @@ function Paginator({ page, total, pageSize, onChange }: { page: number; total: n
       </p>
       <div className="flex items-center gap-1">
         <button onClick={() => onChange(page - 1)} disabled={page === 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          className={`${btnBase} border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed`}>
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
-        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
-          <button key={p} onClick={() => onChange(p)}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${p === page ? "border-cyan-500 bg-cyan-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
-            style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
-            {p}
-          </button>
-        ))}
+        {pages.map((p, i) =>
+          p === "..." ? (
+            <span key={`ellipsis-${i}`} className="px-1 text-gray-400" style={{ fontSize: "0.75rem" }}>…</span>
+          ) : (
+            <button key={p} onClick={() => onChange(p as number)}
+              className={`${btnBase} ${p === page ? "border-cyan-500 bg-cyan-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+              style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
+              {p}
+            </button>
+          )
+        )}
         <button onClick={() => onChange(page + 1)} disabled={page === totalPages}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          className={`${btnBase} border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed`}>
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -115,9 +136,12 @@ export function Dashboard() {
   // ── Chart (on-demand) ──
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const chartStartDate = useMemo(() => chartData.find(p => p.predicted !== null)?.date ?? null, [chartData]);
   const [chartLoading, setChartLoading] = useState(false);
-  // Component-level chart cache: avoids re-generating synthetic history on repeated selections
   const chartCache = useRef<Map<string, ChartPoint[]>>(new Map());
+
+  // ── Priority map: accumulates as product pages load (name → priority) ──
+  const [priorityMap, setPriorityMap] = useState<Record<string, string>>({});
 
   // ── UI ──
   const [activeTab, setActiveTab] = useState<"dashboard" | "purchase">("dashboard");
@@ -169,7 +193,14 @@ export function Dashboard() {
     setProductsLoading(true);
     dashboardService
       .getProducts(predictionId, resultsPage, PAGE, resultsSearch || undefined)
-      .then((data) => setProductsData(data))
+      .then((data) => {
+        setProductsData(data);
+        setPriorityMap((prev) => {
+          const next = { ...prev };
+          for (const p of data.items) next[p.productName] = p.priority;
+          return next;
+        });
+      })
       .catch((err) => console.warn("[Dashboard] getProducts failed:", err))
       .finally(() => setProductsLoading(false));
   }, [summary?.latestPredictionId, resultsPage, resultsSearch]);
@@ -190,7 +221,7 @@ export function Dashboard() {
     dashboardService
       .getChart(predictionId, selectedProduct)
       .then((response) => {
-        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30);
+        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30, response.historicalPoints);
         chartCache.current.set(selectedProduct, full);
         setChartData(full);
       })
@@ -221,10 +252,9 @@ export function Dashboard() {
   );
 
   // ── Table helpers ──
-  const getAvgHistorical = (p: DashboardProductRow) => Math.round(p.avgPredictedQuantity * 0.88);
   const getVariation = (p: DashboardProductRow) => {
-    const a = getAvgHistorical(p);
-    return a > 0 ? ((p.avgPredictedQuantity - a) / a) * 100 : 0;
+    const hist = p.historicalAvg ?? 0;
+    return hist > 0 ? ((p.avgPredictedQuantity - hist) / hist) * 100 : 0;
   };
 
   const formatDate = (dateStr: string) =>
@@ -520,7 +550,7 @@ export function Dashboard() {
                               </div>
                             ) : sidebarProducts.map((name) => {
                               const isSelected = name === selectedProduct;
-                              const pConf = priorityConfig["low"];
+                              const pConf = priorityConfig[(priorityMap[name] ?? "low") as keyof typeof priorityConfig];
                               return (
                                 <button key={name} onClick={() => { setSelectedProduct(name); setSidebarOpen(false); }}
                                   className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-cyan-500/5 border-r-2 border-r-cyan-500" : ""}`}>
@@ -600,15 +630,14 @@ export function Dashboard() {
                                 </linearGradient>
                               </defs>
                               <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                              <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                              <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" dy={8} />
                               <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
                               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                              <ReferenceLine x={bridgeLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
-                                label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
                               {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGrad2)" connectNulls={false} isAnimationActive={false} />}
                               {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#f9fafb" connectNulls={false} isAnimationActive={false} />}
-                              <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
+                              <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
                               <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
+                              {chartStartDate && <ReferenceLine x={chartStartDate} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3" label={{ value: "Inicio pred.", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />}
                             </ComposedChart>
                           </ResponsiveContainer>
                         </motion.div>
@@ -644,7 +673,7 @@ export function Dashboard() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200">
-                            {["Producto", "Dem. Histórica", "Dem. Predicha (día)", "Variación", "Tendencia"].map((h) => (
+                            {["Producto", "Hist. prom/día", "Pred. prom/día", "Total predicho", "Variación", "Tendencia"].map((h) => (
                               <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
                             ))}
                           </tr>
@@ -652,10 +681,13 @@ export function Dashboard() {
                         <tbody>
                           {(productsData?.items ?? []).map((p) => {
                             const pConf = priorityConfig[p.priority];
-                            const hist = getAvgHistorical(p);
+                            const hist = p.historicalAvg;
                             const varVal = getVariation(p);
-                            const isUp = varVal > 2;
-                            const isDown = varVal < -2;
+                            const isUp = varVal > 5;
+                            const isDown = varVal < -5;
+                            const trendColor = isUp ? "text-cyan-500" : isDown ? "text-red-500" : "text-gray-400";
+                            const trendBg = isUp ? "bg-cyan-500/10" : isDown ? "bg-red-500/10" : "bg-gray-100";
+                            const TrendIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
                             return (
                               <tr key={p.productName} className="border-b border-gray-100 hover:bg-white transition-colors">
                                 <td className="py-3 pr-4">
@@ -664,22 +696,23 @@ export function Dashboard() {
                                     <span className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</span>
                                   </div>
                                 </td>
-                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{hist} uds</td>
-                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{Math.round(p.avgPredictedQuantity)} uds</td>
+                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{hist != null ? `${hist.toFixed(1)} uds` : "—"}</td>
+                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{p.avgPredictedQuantity.toFixed(1)} uds</td>
+                                <td className="py-3 pr-4 text-cyan-600" style={{ fontSize: "0.8125rem", fontWeight: 700 }}>{Math.round(p.totalPredictedQuantity)} uds</td>
                                 <td className="py-3 pr-4">
-                                  <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 ${isUp ? "bg-red-50 text-red-500" : isDown ? "bg-green-50 text-green-500" : "bg-gray-100 text-gray-500"}`}
+                                  <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 ${trendBg} ${trendColor}`}
                                     style={{ fontSize: "0.75rem", fontWeight: 600 }}>
                                     {isUp ? "+" : isDown ? "" : "~"}{varVal.toFixed(1)}%
                                   </span>
                                 </td>
                                 <td className="py-3">
-                                  {isUp ? <TrendingUp className="h-4 w-4 text-red-400" /> : isDown ? <TrendingDown className="h-4 w-4 text-green-400" /> : <Minus className="h-4 w-4 text-gray-300" />}
+                                  <TrendIcon className={`h-4 w-4 ${trendColor}`} />
                                 </td>
                               </tr>
                             );
                           })}
                           {!productsLoading && !productsData?.items.length && (
-                            <tr><td colSpan={5} className="py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>Sin datos de productos</td></tr>
+                            <tr><td colSpan={6} className="py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>Sin datos de productos</td></tr>
                           )}
                         </tbody>
                       </table>

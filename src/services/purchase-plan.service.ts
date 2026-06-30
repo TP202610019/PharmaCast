@@ -59,4 +59,15 @@ export const purchasePlanService = {
     );
     return data.data!;
   },
+
+  async getLatestEvaluation(planId: string): Promise<PlanEvaluationResponse | null> {
+    try {
+      const { data } = await http.get<ApiResponse<PlanEvaluationResponse>>(
+        `/api/purchase-plans/${planId}/evaluation/latest`
+      );
+      return data.data ?? null;
+    } catch {
+      return null; // 404 = no evaluation saved yet
+    }
+  },
 };
