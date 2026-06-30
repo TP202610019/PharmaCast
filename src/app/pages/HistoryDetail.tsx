@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { downloadCsv, downloadPdf } from "../../lib/exportUtils";
 import { dashboardService } from "../../services/dashboard.service";
 import { purchasePlanService } from "../../services/purchase-plan.service";
 import { datasetService } from "../../services/dataset.service";
@@ -36,7 +37,11 @@ function truncateStr(s: string, n: number) {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
-  const filtered = payload.filter((p: any) => p.value != null && p.name !== "upper" && p.name !== "lower");
+  const hasPredicted = payload.some((p: any) => p.name === "predicted" && p.value != null);
+  const filtered = payload.filter((p: any) =>
+    p.value != null && p.name !== "upper" && p.name !== "lower" &&
+    !(p.name === "historical" && hasPredicted)
+  );
   if (!filtered.length) return null;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
@@ -59,6 +64,19 @@ const PAGE = 10;
 function Paginator({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / pageSize);
   if (totalPages <= 1) return null;
+
+  const pages: (number | "...")[] = [];
+  const delta = 1;
+  const range: number[] = [];
+  for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) range.push(i);
+  pages.push(1);
+  if (range[0] > 2) pages.push("...");
+  pages.push(...range);
+  if (range[range.length - 1] < totalPages - 1) pages.push("...");
+  if (totalPages > 1) pages.push(totalPages);
+
+  const btnBase = "flex h-7 min-w-[1.75rem] items-center justify-center rounded-lg border px-1 transition-all";
+
   return (
     <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
       <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
@@ -66,18 +84,22 @@ function Paginator({ page, total, pageSize, onChange }: { page: number; total: n
       </p>
       <div className="flex items-center gap-1">
         <button onClick={() => onChange(page - 1)} disabled={page === 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          className={`${btnBase} border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed`}>
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
-        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
-          <button key={p} onClick={() => onChange(p)}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${p === page ? "border-cyan-500 bg-cyan-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
-            style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
-            {p}
-          </button>
-        ))}
+        {pages.map((p, i) =>
+          p === "..." ? (
+            <span key={`ellipsis-${i}`} className="px-1 text-gray-400" style={{ fontSize: "0.75rem" }}>…</span>
+          ) : (
+            <button key={p} onClick={() => onChange(p as number)}
+              className={`${btnBase} ${p === page ? "border-cyan-500 bg-cyan-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+              style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
+              {p}
+            </button>
+          )
+        )}
         <button onClick={() => onChange(page + 1)} disabled={page === totalPages}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          className={`${btnBase} border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed`}>
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -103,8 +125,12 @@ export function HistoryDetail() {
   // ── Chart (on-demand) ──
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const chartStartDate = useMemo(() => chartData.find(p => p.predicted !== null)?.date ?? null, [chartData]);
   const [chartLoading, setChartLoading] = useState(false);
   const chartCache = useRef<Map<string, ChartPoint[]>>(new Map());
+
+  // ── Export ──
+  const [exportLoading, setExportLoading] = useState(false);
 
   // ── UI ──
   const [activeTab, setActiveTab] = useState<"dashboard" | "purchase" | "evaluation">("dashboard");
@@ -162,19 +188,45 @@ export function HistoryDetail() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  async function handleExport(format: "csv" | "pdf") {
+    if (!id) return;
+    setExportLoading(true);
+    try {
+      const all = await dashboardService.getProducts(id, 1, 9999);
+      const headers = ["Producto", "Cant. Total Prevista (uds)", "Cant. Diaria (uds)", "Prioridad"];
+      const rows = all.items.map((p) => [
+        p.productName,
+        Math.round(p.totalPredictedQuantity),
+        p.avgPredictedQuantity.toFixed(1),
+        priorityConfig[p.priority].label,
+      ]);
+      const filename = `plan-compras-${new Date().toISOString().slice(0, 10)}`;
+      if (format === "csv") {
+        downloadCsv(`${filename}.csv`, headers, rows);
+      } else {
+        const subtitle = summary?.forecastPeriod
+          ? `Predicción para los próximos ${summary.forecastPeriod} días — generado el ${new Date().toLocaleDateString("es-ES")}`
+          : `Generado el ${new Date().toLocaleDateString("es-ES")}`;
+        downloadPdf(`${filename}.pdf`, "Plan de compras recomendado", subtitle, headers, rows);
+      }
+    } finally {
+      setExportLoading(false);
+    }
+  }
 
-
-  // ── Load purchase plan ID when purchase or evaluation tab opens ──
+  // ── Load purchase plan ID + saved evaluation when evaluation tab opens ──
   useEffect(() => {
     if ((activeTab !== "purchase" && activeTab !== "evaluation") || !id || planIdLoadStarted.current) return;
     planIdLoadStarted.current = true;
     setPurchasePlanIdLoading(true);
     purchasePlanService.getByExecution(id)
-      .then((p) => {
+      .then(async (p) => {
         setPurchasePlanId(p.id);
-        // keep up to 5 sample product names so we can show them in diagnostics
         const samples = (p.items ?? []).slice(0, 5).map((i: { productName: string }) => i.productName);
         setPlanSampleNames(samples);
+        // Load saved evaluation automatically so the user sees the last result without re-uploading
+        const saved = await purchasePlanService.getLatestEvaluation(p.id);
+        if (saved) setPlanEvalResult(saved);
       })
       .catch(() => {})
       .finally(() => setPurchasePlanIdLoading(false));
@@ -212,7 +264,7 @@ export function HistoryDetail() {
     dashboardService
       .getChart(id, selectedProduct)
       .then((response) => {
-        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30);
+        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30, response.historicalPoints);
         chartCache.current.set(selectedProduct, full);
         setChartData(full);
       })
@@ -258,10 +310,9 @@ export function HistoryDetail() {
     return end.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
   }, [summary?.latestPredictionDate, summary?.forecastPeriod]);
 
-  const getAvgHistorical = (p: DashboardProductRow) => Math.round(p.avgPredictedQuantity * 0.88);
   const getVariation = (p: DashboardProductRow) => {
-    const a = getAvgHistorical(p);
-    return a > 0 ? ((p.avgPredictedQuantity - a) / a) * 100 : 0;
+    const hist = p.historicalAvg ?? 0;
+    return hist > 0 ? ((p.avgPredictedQuantity - hist) / hist) * 100 : 0;
   };
 
   const formatDate = (dateStr: string) =>
@@ -365,9 +416,13 @@ export function HistoryDetail() {
     try {
       const headers = await parseFileHeaders(file);
       setSalesColumns(headers);
-      const detectedProdCol = fuzzyMatch(headers, "producto", "nombre", "product", "item", "descripcion", "medicamento", "articulo");
+      // Prefer exact column from saved DB mapping; fall back to fuzzy keyword match
+      const mappedProdCol = summary?.salesProductColumn && headers.includes(summary.salesProductColumn) ? summary.salesProductColumn : null;
+      const mappedQtyCol  = summary?.salesQuantityColumn && headers.includes(summary.salesQuantityColumn) ? summary.salesQuantityColumn : null;
+      const detectedProdCol = mappedProdCol ?? fuzzyMatch(headers, "producto", "nombre", "product", "item", "descripcion", "medicamento", "articulo");
+      const detectedQtyCol  = mappedQtyCol  ?? fuzzyMatch(headers, "cantidad", "qty", "quantity", "ventas", "unidades", "cant", "total");
       setEvalSalesProdCol(detectedProdCol);
-      setEvalSalesQtyCol(fuzzyMatch(headers, "cantidad", "qty", "quantity", "ventas", "unidades", "cant", "total"));
+      setEvalSalesQtyCol(detectedQtyCol);
       setEvalSalesPriceCol(fuzzyMatch(headers, "precio", "price", "valor", "costo", "monto", "unitario"));
       if (detectedProdCol) {
         const sample = await parseCsvColumnSample(file, detectedProdCol);
@@ -435,14 +490,20 @@ export function HistoryDetail() {
         </div>
 
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+          <button
+            onClick={() => handleExport("csv")}
+            disabled={exportLoading}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontSize: "0.8125rem" }}>
-            <Download className="h-4 w-4" />
+            {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Exportar CSV
           </button>
-          <button className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all"
+          <button
+            onClick={() => handleExport("pdf")}
+            disabled={exportLoading}
+            className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-            <Download className="h-4 w-4" />
+            {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Exportar PDF
           </button>
         </div>
@@ -617,11 +678,10 @@ export function HistoryDetail() {
                           <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
                           <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
                           <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                          <ReferenceLine x={bridgeDateLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
-                            label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
+                          {chartStartDate && <ReferenceLine x={chartStartDate} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3" label={{ value: "Inicio pred.", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />}
                           {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradHD)" connectNulls={false} isAnimationActive={false} />}
                           {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
-                          <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
+                          <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
                           <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -665,14 +725,14 @@ export function HistoryDetail() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {["Producto", "Dem. Histórica Prom.", "Demanda Predicha (día)", "Variación (%)", "Tendencia"].map((h) => (
+                      {["Producto", "Hist. prom/día", "Pred. prom/día", "Total predicho", "Variación (%)", "Tendencia"].map((h) => (
                         <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {(productsData?.items ?? []).map((p) => {
-                      const hist = getAvgHistorical(p);
+                      const hist = p.historicalAvg;
                       const varNum = getVariation(p);
                       const isUp = varNum > 5;
                       const isDown = varNum < -5;
@@ -682,8 +742,9 @@ export function HistoryDetail() {
                       return (
                         <tr key={p.productName} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</td>
-                          <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{hist} uds</td>
-                          <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{Math.round(p.avgPredictedQuantity)} uds</td>
+                          <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{hist != null ? `${hist.toFixed(1)} uds` : "—"}</td>
+                          <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.avgPredictedQuantity.toFixed(1)} uds</td>
+                          <td className="py-3 pr-3 text-cyan-600" style={{ fontSize: "0.8125rem", fontWeight: 700 }}>{Math.round(p.totalPredictedQuantity)} uds</td>
                           <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
                             <span className={varNum > 0 ? "text-cyan-500" : "text-red-500"} style={{ fontWeight: 500 }}>
                               {varNum > 0 ? "+" : ""}{varNum.toFixed(1)}%
@@ -700,7 +761,7 @@ export function HistoryDetail() {
                       );
                     })}
                     {!productsLoading && !productsData?.items.length && (
-                      <tr><td colSpan={5} className="py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>No se encontraron productos</td></tr>
+                      <tr><td colSpan={6} className="py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>No se encontraron productos</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -708,7 +769,12 @@ export function HistoryDetail() {
             )}
 
             {productsData && (
-              <Paginator page={resultsPage} total={productsData.totalCount} pageSize={PAGE} onChange={setResultsPage} />
+              <Paginator
+                page={resultsPage}
+                total={productsData.totalCount}
+                pageSize={PAGE}
+                onChange={setResultsPage}
+              />
             )}
           </div>
         </div>
@@ -1105,22 +1171,22 @@ export function HistoryDetail() {
                 <p className="text-gray-900 mb-4" style={{ fontWeight: 700, fontSize: "1rem" }}>Resultado</p>
                 <div className={`grid gap-4 ${planEvalResult.summary.hasPharmacyPlan ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
                   <div className="rounded-xl bg-cyan-50 border border-cyan-100 p-4">
-                    <p className="text-cyan-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Efectividad PharmaCast</p>
+                    <p className="text-cyan-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Acierto PharmaCast</p>
                     <p className="text-cyan-700" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.1 }}>
                       {planEvalResult.summary.pharmaCastGoodPct}%
                     </p>
                     <p className="text-cyan-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                      {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmaCastAvgMape}%
+                      {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmaCastWape}%
                     </p>
                   </div>
                   {planEvalResult.summary.hasPharmacyPlan && (
                     <div className="rounded-xl bg-orange-50 border border-orange-100 p-4">
-                      <p className="text-orange-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Efectividad Botica</p>
+                      <p className="text-orange-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Acierto Botica</p>
                       <p className="text-orange-700" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.1 }}>
                         {planEvalResult.summary.pharmacyGoodPct}%
                       </p>
                       <p className="text-orange-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                        {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmacyAvgMape ?? "—"}%
+                        {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmacyWape ?? "—"}%
                       </p>
                     </div>
                   )}

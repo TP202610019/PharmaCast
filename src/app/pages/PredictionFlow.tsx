@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { downloadCsv, downloadPdf } from "../../lib/exportUtils";
 import { useNavigate } from "react-router";
 import {
   Upload,
@@ -44,9 +45,10 @@ import { datasetService } from "../../services/dataset.service";
 import { mappingService, mappingFieldService } from "../../services/mapping.service";
 import { predictionService } from "../../services/prediction.service";
 import { purchasePlanService } from "../../services/purchase-plan.service";
+import { dashboardService } from "../../services/dashboard.service";
 import {
   forecastResultsToProducts,
-  buildProductChartData,
+  buildChartFromBackendPoints,
   buildGeneratedChartData,
   extractAccuracy,
   type UIProduct,
@@ -171,7 +173,11 @@ const parseCsvHeaders = (file: File): Promise<string[]> =>
 /* ── Tooltip ── */
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
-    const filtered = payload.filter((p: any) => p.value != null && p.name !== "upper" && p.name !== "lower");
+    const hasPredicted = payload.some((p: any) => p.name === "predicted" && p.value != null);
+    const filtered = payload.filter((p: any) =>
+      p.value != null && p.name !== "upper" && p.name !== "lower" &&
+      !(p.name === "historical" && hasPredicted)
+    );
     if (!filtered.length) return null;
     return (
       <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
@@ -300,7 +306,7 @@ export function PredictionFlow() {
   /* ── Derived product list ── */
   const products = useMemo<UIProduct[]>(() => {
     if (prediction) {
-      return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? []);
+      return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? [], prediction.metrics);
     }
     return [];
   }, [prediction, purchasePlan]);
@@ -509,7 +515,7 @@ export function PredictionFlow() {
         // Resolve or create mapping config before triggering prediction
         let resolvedMappingId: string | undefined = appliedMappingId ?? undefined;
 
-        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired);
+        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired && f.fieldType === "sales");
         const hasSalesMapping = files.some((f) => f.type === "sales") &&
           requiredCatalogFields.every((f) => salesMapping[f.fieldKey]);
 
@@ -595,8 +601,11 @@ export function PredictionFlow() {
     if (currentStep === 1) return files.length >= 1 && !files.some((f) => f.uploading);
     if (currentStep === 2) {
       const hasSales = files.some((f) => f.type === "sales");
-      const salesRequiredFields = fieldCatalog.filter((f) => f.fieldType === "sales" && f.isRequired);
-      if (hasSales && salesRequiredFields.length > 0 && !salesRequiredFields.every((f) => salesMapping[f.fieldKey])) return false;
+      const hasInventory = files.some((f) => f.type === "inventory");
+      const salesRequired = fieldCatalog.filter((f) => f.fieldType === "sales" && f.isRequired);
+      const invRequired = fieldCatalog.filter((f) => f.fieldType === "inventory" && f.isRequired);
+      if (hasSales && salesRequired.length > 0 && !salesRequired.every((f) => salesMapping[f.fieldKey])) return false;
+      if (hasInventory && invRequired.length > 0 && !invRequired.every((f) => inventoryMapping[f.fieldKey])) return false;
       return true;
     }
     return true;
@@ -626,15 +635,27 @@ export function PredictionFlow() {
     [products, selectedProductId]
   );
 
-  const productChartData = useMemo<ChartPoint[]>(() => {
-    if (prediction && selectedProduct) {
-      return buildProductChartData(selectedProduct.name, prediction.forecastResults, forecastDays);
+  const [productChartData, setProductChartData] = useState<ChartPoint[]>([]);
+  const productChartStartDate = useMemo(() => productChartData.find(p => p.predicted !== null)?.date ?? null, [productChartData]);
+
+  useEffect(() => {
+    if (!prediction || !selectedProduct) {
+      setProductChartData(
+        selectedProduct
+          ? buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays)
+          : buildGeneratedChartData(100, forecastDays)
+      );
+      return;
     }
-    if (selectedProduct) {
-      return buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays);
-    }
-    return buildGeneratedChartData(100, forecastDays);
-  }, [prediction, selectedProduct, forecastDays]);
+    dashboardService
+      .getChart(prediction.id, selectedProduct.name)
+      .then((response) => {
+        setProductChartData(buildChartFromBackendPoints(response.points, forecastDays, response.historicalPoints));
+      })
+      .catch(() => {
+        setProductChartData(buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays));
+      });
+  }, [prediction?.id, selectedProduct?.name, forecastDays]);
 
   const bridgeDateLabel = useMemo(() => {
     const d = new Date();
@@ -643,11 +664,14 @@ export function PredictionFlow() {
   }, []);
 
   const tableData = useMemo(() =>
-    products.map((p) => ({
-      ...p,
-      avgHistorical: Math.round(p.predictedDemand * 0.88),
-      variation: ((p.predictedDemand - Math.round(p.predictedDemand * 0.88)) / Math.max(Math.round(p.predictedDemand * 0.88), 1)) * 100,
-    })),
+    products.map((p) => {
+      const hist = p.historicalAvg ?? 0;
+      const avgPred = p.predictedDemand;
+      return {
+        ...p,
+        variation: hist > 0 ? ((avgPred - hist) / hist) * 100 : 0,
+      };
+    }),
     [products]
   );
 
@@ -674,10 +698,10 @@ export function PredictionFlow() {
     resultsTablePage * PAGE_SIZE_TABLE
   );
 
-  const filteredPlanProducts = useMemo(() =>
-    filterPriority === "all" ? products : products.filter((p) => p.priority === filterPriority),
-    [products, filterPriority]
-  );
+  const filteredPlanProducts = useMemo(() => {
+    const nonZero = products.filter((p) => p.predictedDemand > 0 || p.recommendedQty > 0);
+    return filterPriority === "all" ? nonZero : nonZero.filter((p) => p.priority === filterPriority);
+  }, [products, filterPriority]);
 
   const searchedPlanProducts = useMemo(() =>
     filteredPlanProducts.filter((p) =>
@@ -1563,11 +1587,10 @@ export function PredictionFlow() {
                           <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
                           <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
                           <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                          <ReferenceLine x={bridgeDateLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
-                            label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
+                          {productChartStartDate && <ReferenceLine x={productChartStartDate} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3" label={{ value: "Inicio pred.", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />}
                           {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={false} />}
                           {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
-                          <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
+                          <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
                           <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1596,7 +1619,7 @@ export function PredictionFlow() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-100">
-                          {["Producto", "Categoría", "Dem. Histórica Prom.", "Demanda Predicha", "Variación (%)", "Tendencia"].map((h) => (
+                          {["Producto", "Categoría", "Hist. prom/día", "Pred. prom/día", "Total predicho", "Variación (%)", "Tendencia"].map((h) => (
                             <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
                           ))}
                         </tr>
@@ -1611,8 +1634,9 @@ export function PredictionFlow() {
                             <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                               <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.name}</td>
                               <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.category}</td>
-                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical} uds</td>
+                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.historicalAvg != null ? `${row.historicalAvg.toFixed(1)} uds` : "—"}</td>
                               <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand} uds</td>
+                              <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.totalPredicted} uds</td>
                               <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
                                 <span className={varNum > 0 ? "text-cyan-500" : "text-red-500"} style={{ fontWeight: 500 }}>
                                   {varNum > 0 ? "+" : ""}{varNum.toFixed(1)}%
@@ -1646,12 +1670,47 @@ export function PredictionFlow() {
                   <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>Basado en la predicción para los próximos {forecastDays} días</p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+                  <button
+                    onClick={() => {
+                      const showStock = products.some((p) => p.hasInventory);
+                      const headers = [
+                        "Producto", "Categoría", "Demanda predicha (uds)",
+                        ...(showStock ? ["Stock actual (uds)", "A comprar (uds)"] : ["Cant. recomendada (uds)"]),
+                        "Prioridad",
+                      ];
+                      const rows = products.map((p) => [
+                        p.name, p.category, p.predictedDemand,
+                        ...(showStock ? [p.hasInventory ? p.currentStock : "—", p.recommendedQty] : [p.recommendedQty]),
+                        priorityConfig[p.priority].label,
+                      ]);
+                      downloadCsv(`plan-compras-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+                    }}
+                    className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
                     style={{ fontSize: "0.8125rem" }}>
                     <Download className="h-4 w-4" />
                     Exportar CSV
                   </button>
-                  <button className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all"
+                  <button
+                    onClick={() => {
+                      const showStock = products.some((p) => p.hasInventory);
+                      const headers = [
+                        "Producto", "Categoría", "Demanda predicha (uds)",
+                        ...(showStock ? ["Stock actual (uds)", "A comprar (uds)"] : ["Cant. recomendada (uds)"]),
+                        "Prioridad",
+                      ];
+                      const rows = products.map((p) => [
+                        p.name, p.category, p.predictedDemand,
+                        ...(showStock ? [p.hasInventory ? p.currentStock : "—", p.recommendedQty] : [p.recommendedQty]),
+                        priorityConfig[p.priority].label,
+                      ]);
+                      downloadPdf(
+                        `plan-compras-${new Date().toISOString().slice(0, 10)}.pdf`,
+                        "Plan de compras recomendado",
+                        `Predicción para los próximos ${forecastDays} días — generado el ${new Date().toLocaleDateString("es-ES")}`,
+                        headers, rows,
+                      );
+                    }}
+                    className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all"
                     style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
                     <Download className="h-4 w-4" />
                     Exportar PDF

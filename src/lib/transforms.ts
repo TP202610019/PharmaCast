@@ -4,6 +4,7 @@ import type {
   PurchasePlanItemResponse,
   PredictionSummaryResponse,
   DashboardChartPoint,
+  DashboardHistoricalPoint,
 } from "../types/api";
 import { ExecutionStatus } from "../types/api";
 
@@ -29,22 +30,24 @@ export interface UIProduct {
   hasInventory: boolean;
   priority: "critical" | "high" | "medium" | "low";
   unitCost: number;
+  historicalAvg: number | null;
+  totalPredicted: number;
 }
 
 // ─── Derive UI products from forecast results ─────────────────────────────────
 
 export function forecastResultsToProducts(
   forecastResults: ForecastResultResponse[],
-  purchasePlanItems: PurchasePlanItemResponse[]
+  purchasePlanItems: PurchasePlanItemResponse[],
+  metrics?: PredictionMetricResponse[]
 ): UIProduct[] {
-  const productMap = new Map<string, { total: number; count: number; lowerBound: number }>();
+  const productMap = new Map<string, { total: number; count: number }>();
 
   for (const r of forecastResults) {
-    const existing = productMap.get(r.productName) ?? { total: 0, count: 0, lowerBound: 0 };
+    const existing = productMap.get(r.productName) ?? { total: 0, count: 0 };
     productMap.set(r.productName, {
       total: existing.total + r.predictedQuantity,
       count: existing.count + 1,
-      lowerBound: existing.lowerBound + (r.lowerBound ?? r.predictedQuantity),
     });
   }
 
@@ -53,15 +56,23 @@ export function forecastResultsToProducts(
     planMap.set(item.productName, item);
   }
 
+  const historicalMap = new Map<string, number | null>();
+  if (metrics) {
+    for (const m of metrics) {
+      if (m.productName) {
+        historicalMap.set(m.productName, m.historicalAvg ?? null);
+      }
+    }
+  }
+
   let idx = 0;
   const products: UIProduct[] = [];
 
   for (const [name, agg] of productMap) {
     const avgPredicted = agg.total / Math.max(agg.count, 1);
-    const avgLower = agg.lowerBound / Math.max(agg.count, 1);
     const planItem = planMap.get(name);
 
-    const priority = derivePriority(avgPredicted, avgLower);
+    const priority = derivePriority(avgPredicted);
 
     products.push({
       id: `product-${idx++}`,
@@ -75,20 +86,18 @@ export function forecastResultsToProducts(
       unitCost: planItem?.estimatedCost
         ? planItem.estimatedCost / Math.max(planItem.recommendedQuantity, 1)
         : 0,
+      historicalAvg: historicalMap.get(name) ?? null,
+      totalPredicted: Math.round(agg.total),
     });
   }
 
   return products;
 }
 
-function derivePriority(
-  predicted: number,
-  lowerBound: number
-): "critical" | "high" | "medium" | "low" {
-  const ratio = lowerBound > 0 ? predicted / lowerBound : 1;
-  if (ratio > 1.5) return "critical";
-  if (ratio > 1.25) return "high";
-  if (ratio > 1.1) return "medium";
+function derivePriority(avgDailyQty: number): "critical" | "high" | "medium" | "low" {
+  if (avgDailyQty > 1.67) return "critical";
+  if (avgDailyQty > 0.42) return "high";
+  if (avgDailyQty > 0.08) return "medium";
   return "low";
 }
 
@@ -105,50 +114,16 @@ export function buildProductChartData(
 
   if (!filtered.length) return buildGeneratedChartData(100, forecastPeriod);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const avgPredicted =
-    filtered.reduce((s, r) => s + r.predictedQuantity, 0) / filtered.length;
-
-  const points: ChartPoint[] = [];
-
-  // Generate 30 days of "historical" data before the first forecast
-  for (let i = -30; i < 0; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-    const noise = (Math.random() - 0.5) * avgPredicted * 0.12;
-    const wave = Math.sin(i * 0.38) * avgPredicted * 0.1;
-    points.push({
-      date: label,
-      historical: Math.round(Math.max(0, avgPredicted * 0.85 + wave + noise)),
-      predicted: null,
-      upper: null,
-      lower: null,
-    });
-  }
-
-  // Bridge point
-  const todayLabel = today.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-  const bridgeVal = Math.round(avgPredicted * 0.9);
-  points.push({ date: todayLabel, historical: bridgeVal, predicted: bridgeVal, upper: bridgeVal, lower: bridgeVal });
-
-  // Actual forecast points
-  for (const r of filtered) {
-    const d = new Date(r.forecastDate);
-    const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
+  return filtered.map((r) => {
     const conf = Math.round(r.predictedQuantity * 0.11);
-    points.push({
-      date: label,
+    return {
+      date: new Date(r.forecastDate + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
       historical: null,
       predicted: Math.round(r.predictedQuantity),
       upper: r.upperBound !== null ? Math.round(r.upperBound) : Math.round(r.predictedQuantity) + conf,
       lower: r.lowerBound !== null ? Math.round(r.lowerBound) : Math.max(0, Math.round(r.predictedQuantity) - conf),
-    });
-  }
-
-  return points;
+    };
+  });
 }
 
 // ─── Fallback chart data when no forecast results exist ───────────────────────
@@ -158,84 +133,72 @@ export function buildGeneratedChartData(baseVal: number, days: number): ChartPoi
   today.setHours(0, 0, 0, 0);
   const data: ChartPoint[] = [];
 
-  for (let i = -30; i < days; i++) {
+  for (let i = 0; i < days; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-    const noise = (Math.random() - 0.5) * baseVal * 0.12;
-    const wave = Math.sin(i * 0.38) * baseVal * 0.1;
-    const base = Math.round(Math.max(0, baseVal + wave + noise));
-
-    if (i < 0) {
-      data.push({ date: label, historical: base, predicted: null, upper: null, lower: null });
-    } else if (i === 0) {
-      data.push({ date: label, historical: base, predicted: base, upper: base, lower: base });
-    } else {
-      const ramp = baseVal * (1 + (i / days) * 0.08);
-      const predVal = Math.round(Math.max(0, ramp + (Math.random() - 0.5) * 12));
-      const conf = Math.round(predVal * 0.11);
-      data.push({ date: label, historical: null, predicted: predVal, upper: predVal + conf, lower: Math.max(0, predVal - conf) });
-    }
+    const conf = Math.round(baseVal * 0.11);
+    data.push({ date: label, historical: null, predicted: baseVal, upper: baseVal + conf, lower: Math.max(0, baseVal - conf) });
   }
   return data;
 }
 
-// ─── Build chart from backend forecast points (replaces buildProductChartData) ─
-//
-// Historical segment (30 days) is generated synthetically since the ML pipeline
-// does not yet persist pre-forecast sales rows. Replace with a real query against
-// historical_datasets once that persistence layer is added.
-
 export function buildChartFromBackendPoints(
   backendPoints: DashboardChartPoint[],
-  forecastPeriod: number
+  forecastPeriod: number,
+  historicalPoints?: DashboardHistoricalPoint[]
 ): ChartPoint[] {
   if (!backendPoints.length) return buildGeneratedChartData(100, forecastPeriod);
 
-  const avgPredicted =
-    backendPoints.reduce((s, p) => s + p.predicted, 0) / backendPoints.length;
+  const points: ChartPoint[] = [];
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  if (historicalPoints && historicalPoints.length > 0) {
+    // Build historical map: date label → quantity
+    const histMap = new Map<string, number>();
+    for (const h of historicalPoints) {
+      const label = new Date(h.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
+      histMap.set(label, h.quantity);
+    }
 
-  const result: ChartPoint[] = [];
+    // Add all historical points (historical wins on duplicate dates)
+    for (const h of historicalPoints) {
+      const label = new Date(h.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
+      points.push({ date: label, historical: h.quantity, predicted: null, upper: null, lower: null });
+    }
 
-  // Synthetic 30-day history before today
-  for (let i = -30; i < 0; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-    const noise = (Math.random() - 0.5) * avgPredicted * 0.12;
-    const wave = Math.sin(i * 0.38) * avgPredicted * 0.1;
-    result.push({
-      date: label,
-      historical: Math.round(Math.max(0, avgPredicted * 0.85 + wave + noise)),
-      predicted: null,
-      upper: null,
-      lower: null,
-    });
+    // Add prediction points, skip dates already covered by historical
+    const lastHistQty = historicalPoints[historicalPoints.length - 1]?.quantity ?? null;
+    let bridged = false;
+    for (const p of backendPoints) {
+      const label = new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
+      if (histMap.has(label)) continue; // historical takes priority
+
+      const conf = Math.round(p.predicted * 0.11);
+      points.push({
+        date: label,
+        // Bridge only on the very first prediction-only point so the lines visually touch
+        historical: !bridged && lastHistQty != null ? lastHistQty : null,
+        predicted: p.predicted,
+        upper: p.upper ?? Math.round(p.predicted) + conf,
+        lower: p.lower ?? Math.max(0, Math.round(p.predicted) - conf),
+      });
+      bridged = true;
+    }
+  } else {
+    // No historical data — just show predictions
+    for (const p of backendPoints) {
+      const conf = Math.round(p.predicted * 0.11);
+      points.push({
+        date: new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
+        historical: null,
+        predicted: p.predicted,
+        upper: p.upper ?? Math.round(p.predicted) + conf,
+        lower: p.lower ?? Math.max(0, Math.round(p.predicted) - conf),
+      });
+    }
   }
 
-  // Bridge point at today
-  const todayLabel = today.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-  const bridgeVal = Math.round(avgPredicted * 0.9);
-  result.push({ date: todayLabel, historical: bridgeVal, predicted: bridgeVal, upper: bridgeVal, lower: bridgeVal });
-
-  // Real forecast points from backend
-  for (const p of backendPoints) {
-    // Date arrives as "yyyy-MM-dd"; append T00:00:00 to avoid timezone shift
-    const d = new Date(p.date + "T00:00:00");
-    const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-    result.push({
-      date: label,
-      historical: null,
-      predicted: p.predicted,
-      upper: p.upper,
-      lower: p.lower,
-    });
-  }
-
-  return result;
+  return points;
 }
 
 // ─── Extract overall accuracy from metrics ────────────────────────────────────

@@ -7,12 +7,6 @@ export enum ExecutionStatus {
   Failed = 4,
 }
 
-export enum ReportType {
-  PurchasePlan = 1,
-  ForecastSummary = 2,
-  MetricsReport = 3,
-  FullAnalysis = 4,
-}
 
 export enum DatasetStage {
   Temporary = 1,
@@ -91,7 +85,7 @@ export interface DashboardMetricsResponse {
   totalPredictions: number;
   completedPredictions: number;
   pendingPredictions: number;
-  totalReports: number;
+
   recentExecutions: RecentExecutionSummary[];
 }
 
@@ -105,6 +99,8 @@ export interface DashboardSummaryResponse {
   criticalCount: number;
   totalForecastedUnits: number;
   productNames: string[];
+  salesProductColumn: string | null;
+  salesQuantityColumn: string | null;
 }
 
 export interface DashboardProductRow {
@@ -112,6 +108,7 @@ export interface DashboardProductRow {
   totalPredictedQuantity: number;
   avgPredictedQuantity: number;
   priority: "critical" | "high" | "medium" | "low";
+  historicalAvg: number | null;
 }
 
 export interface PagedResult<T> {
@@ -129,9 +126,15 @@ export interface DashboardChartPoint {
   lower: number | null;
 }
 
+export interface DashboardHistoricalPoint {
+  date: string;
+  quantity: number;
+}
+
 export interface DashboardChartResponse {
   productName: string;
   points: DashboardChartPoint[];
+  historicalPoints: DashboardHistoricalPoint[];
 }
 
 // ─── Dataset DTOs ────────────────────────────────────────────────────────────
@@ -213,6 +216,7 @@ export interface PredictionMetricResponse {
   mae: number | null;
   mape: number | null;
   rows: number | null;
+  historicalAvg: number | null;
 }
 
 export interface PredictionResponse {
@@ -275,8 +279,8 @@ export interface PlanEvaluationItem {
   pharmacyPlan: number | null;
   pharmaCastAccuracy: 'good' | 'ok' | 'poor';
   pharmacyAccuracy: 'good' | 'ok' | 'poor' | null;
-  mape: number;
-  pharmacyMape: number | null;
+  wape: number;
+  pharmacyWape: number | null;
   sobrestockSoles: number;
   desabastoSoles: number;
   pharmacySobrestockSoles: number | null;
@@ -291,8 +295,8 @@ export interface PlanEvaluationSummary {
   hasPrice: boolean;
   pharmaCastGoodPct: number;
   pharmacyGoodPct: number;
-  pharmaCastAvgMape: number;
-  pharmacyAvgMape: number | null;
+  pharmaCastWape: number;
+  pharmacyWape: number | null;
   pharmaCastTotalSobrestockSoles: number;
   pharmaCastTotalDesabastoSoles: number;
   pharmacyTotalSobrestockSoles: number | null;
@@ -305,21 +309,6 @@ export interface PlanEvaluationResponse {
   items: PlanEvaluationItem[];
 }
 
-// ─── Report DTOs ─────────────────────────────────────────────────────────────
-
-export interface GenerateReportRequest {
-  predictionExecutionId: string;
-  reportType: ReportType;
-}
-
-export interface ReportResponse {
-  id: string;
-  predictionExecutionId: string;
-  reportType: ReportType;
-  blobPath: string | null;
-  generatedAt: string;
-  createdAt: string;
-}
 
 // ─── API Error ───────────────────────────────────────────────────────────────
 

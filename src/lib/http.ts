@@ -37,7 +37,7 @@ export function clearTokens() {
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000",
+  baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: Number(import.meta.env.VITE_API_TIMEOUT ?? 30000),
   headers: {
     "Content-Type": "application/json",
@@ -100,7 +100,7 @@ http.interceptors.response.use(
       try {
         const body: RefreshTokenRequest = { accessToken, refreshToken };
         const { data } = await axios.post<ApiResponse<{ accessToken: string; refreshToken: string; expiresAt: string }>>(
-          `${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000"}/api/auth/refresh`,
+          `${import.meta.env.VITE_API_BASE_URL}/api/auth/refresh`,
           body,
           { headers: { "Content-Type": "application/json" } }
         );
