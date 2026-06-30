@@ -3,5 +3,9 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
 *.local
 .claude/
+coverage/
+*.log
