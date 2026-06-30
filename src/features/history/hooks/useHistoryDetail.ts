@@ -190,7 +190,7 @@ export function useHistoryDetail() {
     dashboardService
       .getChart(id, selectedProduct)
       .then((response) => {
-        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30);
+        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30, response.historicalPoints);
         chartCache.current.set(selectedProduct, full);
         setChartData(full);
       })
@@ -215,9 +215,10 @@ export function useHistoryDetail() {
 
   const paginatedPlan = planItems.slice((planPage - 1) * PAGE, planPage * PAGE);
 
+  // Find the bridge point in chart data — first point where both historical and predicted are non-null
   const bridgeDateLabel = useMemo(
-    () => new Date().toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
-    []
+    () => chartData.find((p) => p.historical !== null && p.predicted !== null)?.date ?? "",
+    [chartData]
   );
 
   const periodStart = useMemo(() => {

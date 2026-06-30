@@ -467,51 +467,73 @@ export function TabEvaluation({
                 })}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart
-                data={planEvalResult.items.slice(0, chartLimit).map((item) => ({
-                  name: item.productName.slice(0, 16),
-                  fullName: item.productName,
-                  actual: Math.round(item.actualSold),
-                  pharmaCast: Math.round(item.pharmaCastPlan),
-                  ...(planEvalResult.summary.hasPharmacyPlan ? { botica: item.pharmacyPlan != null ? Math.round(item.pharmacyPlan) : null } : {}),
-                }))}
-                margin={{ top: 8, right: 16, left: 0, bottom: 60 }}
-              >
-                <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10 }} tickLine={false} axisLine={false} angle={-40} textAnchor="end" interval={0} dy={6} />
-                <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
-                <Tooltip
-                  content={({ active, payload }: any) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0]?.payload;
-                    return (
-                      <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 200 }}>
-                        <p className="text-gray-600 mb-2" style={{ fontSize: "0.75rem", fontWeight: 600 }}>{d?.fullName ?? d?.name}</p>
-                        {payload.map((p: any) => (
-                          <div key={p.dataKey} className="flex items-center justify-between gap-4 py-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.stroke }} />
-                              <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>{p.name}</span>
+            {(() => {
+              const chartData = planEvalResult.items.slice(0, chartLimit).map((item) => ({
+                name: item.productName.length > 12 ? item.productName.slice(0, 12) + "…" : item.productName,
+                fullName: item.productName,
+                actual: Math.round(item.actualSold),
+                pharmaCast: Math.round(item.pharmaCastPlan),
+                ...(planEvalResult.summary.hasPharmacyPlan ? { botica: item.pharmacyPlan != null ? Math.round(item.pharmacyPlan) : null } : {}),
+              }));
+              const showLabels = chartLimit <= 15;
+              const labelInterval = showLabels ? Math.max(0, Math.floor(chartLimit / 8) - 1) : undefined;
+              return (
+                <>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: showLabels ? 56 : 12 }}>
+                      <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        tick={showLabels ? { fill: "#94a3b8", fontSize: 10 } : false}
+                        tickLine={false}
+                        axisLine={showLabels}
+                        angle={showLabels ? -40 : 0}
+                        textAnchor={showLabels ? "end" : "middle"}
+                        interval={labelInterval}
+                        dy={6}
+                      />
+                      <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+                      <Tooltip
+                        content={({ active, payload }: any) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0]?.payload;
+                          return (
+                            <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 200 }}>
+                              <p className="text-gray-600 mb-2" style={{ fontSize: "0.75rem", fontWeight: 600 }}>{d?.fullName ?? d?.name}</p>
+                              {payload.map((p: any) => (
+                                <div key={p.dataKey} className="flex items-center justify-between gap-4 py-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.stroke }} />
+                                    <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>{p.name}</span>
+                                  </div>
+                                  <span style={{ color: p.stroke, fontSize: "0.875rem", fontWeight: 700 }}>{p.value} uds</span>
+                                </div>
+                              ))}
                             </div>
-                            <span style={{ color: p.stroke, fontSize: "0.875rem", fontWeight: 700 }}>{p.value} uds</span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }}
-                />
-                <Legend wrapperStyle={{ paddingTop: 8 }} formatter={(v) => <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{v}</span>} />
-                <Line type="monotone" dataKey="actual" name="Vendido real" stroke="#3b82f6" strokeWidth={2.5} dot={false} />
-                <Line type="monotone" dataKey="pharmaCast" name="Plan PharmaCast" stroke="#06b6d4" strokeWidth={2.5} dot={false} />
-                {planEvalResult.summary.hasPharmacyPlan && (
-                  <Line type="monotone" dataKey="botica" name="Plan Botica" stroke="#f97316" strokeWidth={2} strokeDasharray="5 3" dot={false} />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-            <p className="text-gray-400 text-center mt-2" style={{ fontSize: "0.7rem" }}>
-              Ordenado por cantidad prevista — Top {Math.min(chartLimit, planEvalResult.items.length)} de {planEvalResult.items.length} productos
-            </p>
+                          );
+                        }}
+                      />
+                      <Legend
+                        verticalAlign="top"
+                        align="center"
+                        wrapperStyle={{ paddingBottom: 12 }}
+                        formatter={(v) => <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{v}</span>}
+                      />
+                      <Line type="monotone" dataKey="actual" name="Vendido real" stroke="#3b82f6" strokeWidth={2.5} dot={false} />
+                      <Line type="monotone" dataKey="pharmaCast" name="Plan PharmaCast" stroke="#06b6d4" strokeWidth={2.5} dot={false} />
+                      {planEvalResult.summary.hasPharmacyPlan && (
+                        <Line type="monotone" dataKey="botica" name="Plan Botica" stroke="#f97316" strokeWidth={2} strokeDasharray="5 3" dot={false} />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <p className="text-gray-400 text-center mt-1" style={{ fontSize: "0.7rem" }}>
+                    {showLabels
+                      ? `Ordenado por cantidad prevista — Top ${Math.min(chartLimit, planEvalResult.items.length)} de ${planEvalResult.items.length} productos`
+                      : `${Math.min(chartLimit, planEvalResult.items.length)} productos — pasa el cursor sobre el gráfico para ver el nombre`}
+                  </p>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
