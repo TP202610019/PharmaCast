@@ -225,7 +225,7 @@ export function usePredictionFlow() {
 
       try {
         let resolvedMappingId: string | undefined = appliedMappingId ?? undefined;
-        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired);
+        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired && f.fieldType === "sales");
         const hasSalesMapping =
           files.some((f) => f.type === "sales") &&
           requiredCatalogFields.every((f) => salesMapping[f.fieldKey]);
