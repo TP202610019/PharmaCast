@@ -4,10 +4,10 @@ import { datasetService } from "@/shared/services/dataset.service";
 import { mappingService, mappingFieldService } from "@/shared/services/mapping.service";
 import { predictionService } from "@/shared/services/prediction.service";
 import { purchasePlanService } from "@/shared/services/purchase-plan.service";
+import { dashboardService } from "@/shared/services/dashboard.service";
 import {
   forecastResultsToProducts,
-  buildProductChartData,
-  buildGeneratedChartData,
+  buildChartFromBackendPoints,
   extractAccuracy,
   type UIProduct,
   type ChartPoint,
@@ -68,6 +68,10 @@ export function usePredictionFlow() {
   const [uploadError, setUploadError] = useState<string>("");
   const [analysisError, setAnalysisError] = useState<string>("");
   const [savingPlan, setSavingPlan] = useState(false);
+
+  const [productChartData, setProductChartData] = useState<ChartPoint[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const chartCache = useRef<Map<string, ChartPoint[]>>(new Map());
 
   const products = useMemo<UIProduct[]>(() => {
     if (prediction) return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? []);
@@ -331,12 +335,27 @@ export function usePredictionFlow() {
     [products, selectedProductId]
   );
 
-  const productChartData = useMemo<ChartPoint[]>(() => {
-    if (prediction && selectedProduct)
-      return buildProductChartData(selectedProduct.name, prediction.forecastResults, forecastDays);
-    if (selectedProduct)
-      return buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays);
-    return buildGeneratedChartData(100, forecastDays);
+  // Fetch the chart from the backend (same source/shape as History and Dashboard)
+  // so this step shows the same real historical series instead of a locally-built,
+  // history-less one.
+  useEffect(() => {
+    if (!prediction || !selectedProduct) return;
+    const cacheKey = `${prediction.id}:${selectedProduct.name}`;
+    const cached = chartCache.current.get(cacheKey);
+    if (cached) {
+      setProductChartData(cached);
+      return;
+    }
+    setChartLoading(true);
+    dashboardService
+      .getChart(prediction.id, selectedProduct.name)
+      .then((response) => {
+        const full = buildChartFromBackendPoints(response.points, forecastDays, response.historicalPoints);
+        chartCache.current.set(cacheKey, full);
+        setProductChartData(full);
+      })
+      .catch((err) => console.warn("[PredictionFlow] getChart failed:", err))
+      .finally(() => setChartLoading(false));
   }, [prediction, selectedProduct, forecastDays]);
 
   const bridgeDateLabel = useMemo(() => {
@@ -444,7 +463,7 @@ export function usePredictionFlow() {
     planSearch, setPlanSearch,
     prediction, purchasePlan, savingPlan,
     products, accuracy, totalUnits,
-    selectedProduct, productChartData, bridgeDateLabel,
+    selectedProduct, productChartData, chartLoading, bridgeDateLabel,
     tableData, sidebarProducts,
     searchedTableData, paginatedTableData,
     searchedPlanProducts, paginatedPlanProducts,

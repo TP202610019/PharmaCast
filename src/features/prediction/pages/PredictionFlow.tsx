@@ -150,6 +150,7 @@ export function PredictionFlow() {
               setResultsSearch={flow.setResultsSearch}
               selectedProduct={flow.selectedProduct}
               productChartData={flow.productChartData}
+              chartLoading={flow.chartLoading}
               bridgeDateLabel={flow.bridgeDateLabel}
               tableData={flow.tableData}
               sidebarProducts={flow.sidebarProducts}

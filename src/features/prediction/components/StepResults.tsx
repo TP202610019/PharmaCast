@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "motion/react";
 import {
   TrendingUp, TrendingDown, Minus, Package, BarChart3, Calendar,
-  Search, X, CheckCircle, PanelLeftOpen, PanelLeftClose,
+  Search, X, CheckCircle, PanelLeftOpen, PanelLeftClose, Loader2,
 } from "lucide-react";
 import {
   ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid,
@@ -56,6 +56,7 @@ interface Props {
   setResultsSearch: (s: string) => void;
   selectedProduct: UIProduct | undefined;
   productChartData: ChartPoint[];
+  chartLoading: boolean;
   bridgeDateLabel: string;
   tableData: (UIProduct & { avgHistorical: number; variation: number })[];
   sidebarProducts: UIProduct[];
@@ -71,7 +72,7 @@ export function StepResults({
   sidebarSearch, setSidebarSearch,
   resultsTablePage, setResultsTablePage,
   resultsSearch, setResultsSearch,
-  selectedProduct, productChartData, bridgeDateLabel,
+  selectedProduct, productChartData, chartLoading, bridgeDateLabel,
   tableData, sidebarProducts, searchedTableData, paginatedTableData,
 }: Props) {
   return (
@@ -213,30 +214,36 @@ export function StepResults({
         </div>
 
         <div className="px-2 py-4">
-          <AnimatePresence mode="wait">
-            <motion.div key={selectedProductId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-              <ResponsiveContainer width="100%" height={320}>
-                <ComposedChart data={productChartData} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
-                  <defs>
-                    <linearGradient id="confGradientPF" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.15} />
-                      <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
-                  <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
-                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                  <ReferenceLine x={bridgeDateLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
-                    label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
-                  {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={false} />}
-                  {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
-                  <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
-                  <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </motion.div>
-          </AnimatePresence>
+          {chartLoading ? (
+            <div className="flex items-center justify-center h-[320px]">
+              <Loader2 className="h-6 w-6 text-cyan-500 animate-spin" />
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div key={selectedProductId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                <ResponsiveContainer width="100%" height={320}>
+                  <ComposedChart data={productChartData} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
+                    <defs>
+                      <linearGradient id="confGradientPF" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.15} />
+                        <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                    <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
+                    <ReferenceLine x={bridgeDateLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
+                      label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
+                    {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={false} />}
+                    {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
+                    <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
+                    <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </motion.div>
+            </AnimatePresence>
+          )}
         </div>
       </div>
 
