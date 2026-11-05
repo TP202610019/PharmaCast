@@ -107,7 +107,7 @@ export function History() {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
           <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>
             Cargando historial...
           </p>
@@ -133,7 +133,7 @@ export function History() {
           </div>
           <button
             onClick={loadHistory}
-            className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-white hover:bg-cyan-400 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white hover:bg-blue-400 transition-colors"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}
           >
             <RefreshCw className="h-4 w-4" />
@@ -145,19 +145,11 @@ export function History() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] px-6 py-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-gray-900 mb-1" style={{ fontWeight: 700 }}>
-          Historial de predicciones
-        </h1>
-        <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>
-          Consulta y exporta resultados de análisis anteriores
-        </p>
-      </div>
+    <div className="history-page workspace-page">
+      <header className="module-heading"><div><h1>Historial de predicciones</h1><p>Revisa tus análisis anteriores y vuelve a cada resultado.</p></div><button className="module-primary" onClick={() => navigate("/predicciones/nueva")}><BarChart3 size={16}/>Nueva predicción</button></header>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="module-stats grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           {
             label: "Total predicciones",
@@ -184,15 +176,15 @@ export function History() {
             label: "En proceso",
             value: pendingCount.toString(),
             icon: TrendingUp,
-            color: "text-cyan-500",
-            bg: "bg-cyan-500/10 border-cyan-500/20",
+            color: "text-blue-500",
+            bg: "bg-blue-500/10 border-blue-500/20",
           },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
             <div
               key={stat.label}
-              className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+              className="flex items-center gap-4 module-card rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
             >
               <div
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${stat.bg}`}
@@ -223,7 +215,7 @@ export function History() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6 items-center">
+      <div className="history-filters flex flex-wrap gap-3 items-center">
         {/* Search */}
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -232,7 +224,7 @@ export function History() {
             placeholder="Buscar por dataset o ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 bg-white pl-9 pr-4 py-2.5 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 transition-colors"
+            className="w-full rounded-xl border border-gray-300 bg-white pl-9 pr-4 py-2.5 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
             style={{ fontSize: "0.875rem" }}
           />
         </div>
@@ -247,7 +239,7 @@ export function History() {
                 onClick={() => setFilterPeriod(p)}
                 className={`rounded-lg border px-3 py-2 transition-all ${
                   filterPeriod === p
-                    ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-500"
+                    ? "border-blue-500/50 bg-blue-500/10 text-blue-500"
                     : "border-gray-300 bg-white text-gray-500 hover:text-gray-700"
                 }`}
                 style={{ fontSize: "0.8125rem" }}
@@ -270,7 +262,7 @@ export function History() {
               onClick={() => setFilterStatus(s.value)}
               className={`rounded-lg border px-3 py-2 transition-all ${
                 filterStatus === s.value
-                  ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-500"
+                  ? "border-blue-500/50 bg-blue-500/10 text-blue-500"
                   : "border-gray-300 bg-white text-gray-500 hover:text-gray-700"
               }`}
               style={{ fontSize: "0.8125rem" }}
@@ -279,12 +271,12 @@ export function History() {
             </button>
           ))}
         </div>
-      </div>
-
       {/* Results count */}
-      <p className="text-gray-400 mb-4" style={{ fontSize: "0.8125rem" }}>
+      <p className="history-result-count text-gray-400" style={{ fontSize: "0.8125rem" }}>
         {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
       </p>
+
+      </div>
 
       {/* Empty state — no data at all */}
       {records.length === 0 ? (
@@ -297,8 +289,8 @@ export function History() {
             Realiza tu primera predicción para verla aquí
           </p>
           <button
-            onClick={() => navigate("/prediction")}
-            className="mt-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-white hover:bg-cyan-400 transition-colors"
+            onClick={() => navigate("/predicciones/nueva")}
+            className="mt-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white hover:bg-blue-400 transition-colors"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}
           >
             Nueva predicción
@@ -327,8 +319,8 @@ export function History() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: i * 0.06 }}
-                onClick={() => navigate(`/history/${record.id}`)}
-                className="text-left rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-md transition-all group shadow-sm"
+                onClick={() => navigate(`/historial/${record.id}`)}
+                className="history-record text-left module-card rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-md transition-all group shadow-sm"
               >
                 {/* Card header */}
                 <div className="flex items-start justify-between mb-4">
@@ -337,7 +329,7 @@ export function History() {
                       className="text-gray-400 mb-0.5 truncate"
                       style={{ fontSize: "0.6875rem" }}
                     >
-                      ID: {record.id.slice(0, 8)}…
+                      Análisis {record.id.slice(0, 8).toUpperCase()}
                     </p>
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
@@ -380,7 +372,7 @@ export function History() {
                       Período
                     </p>
                     <div className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-cyan-500" />
+                      <Clock className="h-3.5 w-3.5 text-blue-500" />
                       <span
                         className="text-gray-900"
                         style={{ fontSize: "0.875rem", fontWeight: 600 }}
@@ -394,7 +386,7 @@ export function History() {
                       className="text-gray-400 mb-1"
                       style={{ fontSize: "0.6875rem" }}
                     >
-                      Hace
+                      Creado
                     </p>
                     <div className="flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5 text-gray-400" />
@@ -410,7 +402,7 @@ export function History() {
 
                 {/* Footer */}
                 <div className="flex items-center justify-end pt-3 border-t border-gray-100">
-                  <div className="flex items-center gap-1 text-gray-400 group-hover:text-cyan-500 transition-colors">
+                  <div className="flex items-center gap-1 text-gray-400 group-hover:text-blue-500 transition-colors">
                     <span style={{ fontSize: "0.75rem" }}>Ver detalles</span>
                     <ChevronRight className="h-3.5 w-3.5" />
                   </div>

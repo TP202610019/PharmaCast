@@ -1,3 +1,5 @@
+import { exportSavedPurchase } from "../../lib/purchaseExport";
+import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
 import { useParams, useNavigate } from "react-router";
 import {
   ArrowLeft, Calendar, Clock, TrendingUp, AlertCircle, Download,
@@ -27,7 +29,7 @@ const priorityConfig = {
   critical: { label: "Crítico", color: "text-red-500",    bg: "bg-red-500/10",    border: "border-red-500/30",    dot: "bg-red-500"    },
   high:     { label: "Alto",    color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30", dot: "bg-orange-500" },
   medium:   { label: "Medio",   color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/30", dot: "bg-yellow-500" },
-  low:      { label: "Bajo",    color: "text-cyan-500",   bg: "bg-cyan-500/10",   border: "border-cyan-500/30",   dot: "bg-cyan-500"   },
+  low:      { label: "Bajo",    color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30",   dot: "bg-blue-500"   },
 };
 
 function truncateStr(s: string, n: number) {
@@ -40,14 +42,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (!filtered.length) return null;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</p>
+      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.date ?? label}</p>
       {filtered.map((p: any) => (
         <div key={p.name} className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.name === "historical" ? "#3b82f6" : "#06b6d4" }} />
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.name === "historical" ? "#007AFF" : "#007AFF" }} />
             <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>{p.name === "historical" ? "Histórico" : "Predicción"}</span>
           </div>
-          <span style={{ color: p.name === "historical" ? "#3b82f6" : "#06b6d4", fontSize: "0.875rem", fontWeight: 700 }}>{p.value} uds</span>
+          <span style={{ color: p.name === "historical" ? "#007AFF" : "#007AFF", fontSize: "0.875rem", fontWeight: 700 }}>{p.value} uds</span>
         </div>
       ))}
     </div>
@@ -71,7 +73,7 @@ function Paginator({ page, total, pageSize, onChange }: { page: number; total: n
         </button>
         {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
           <button key={p} onClick={() => onChange(p)}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${p === page ? "border-cyan-500 bg-cyan-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${p === page ? "border-blue-500 bg-blue-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
             style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
             {p}
           </button>
@@ -272,7 +274,7 @@ export function HistoryDetail() {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
           <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Cargando predicción...</p>
         </div>
       </div>
@@ -290,18 +292,13 @@ export function HistoryDetail() {
         <div className="flex gap-2">
           {error && (
             <button onClick={loadData}
-              className="flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-colors"
+              className="flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-colors"
               style={{ fontSize: "0.875rem", fontWeight: 600 }}>
               <RefreshCw className="h-4 w-4" />
               Reintentar
             </button>
           )}
-          <button onClick={() => navigate("/history")}
-            className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-            style={{ fontSize: "0.875rem" }}>
-            <ArrowLeft className="h-4 w-4" />
-            Volver al historial
-          </button>
+          <button className="module-secondary" onClick={() => navigate("/historial")}><ArrowLeft size={14}/>Volver al historial</button>
         </div>
       </div>
     );
@@ -401,23 +398,19 @@ export function HistoryDetail() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] px-6 py-8 max-w-6xl mx-auto">
+    <div className="history-detail-page workspace-page">
 
+      <button className="module-back" onClick={() => navigate("/historial")}><ArrowLeft size={14}/>Volver al historial</button>
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+      <div className="module-heading detail-heading">
         <div className="flex items-start gap-4">
-          <button onClick={() => navigate("/history")}
-            className="flex items-center gap-1.5 text-gray-400 hover:text-gray-900 transition-colors mt-1"
-            style={{ fontSize: "0.875rem" }}>
-            <ArrowLeft className="h-4 w-4" />
-            Historial
-          </button>
+
           <div>
             <h1 className="text-gray-900 mb-1" style={{ fontWeight: 700 }}>Predicción</h1>
             <p className="text-gray-400 mb-1" style={{ fontSize: "0.8125rem", fontFamily: "monospace" }}>
-              {summary.latestPredictionId.slice(0, 8).toUpperCase()}…
+              {summary.latestPredictionId}
             </p>
-            <div className="flex items-center gap-4">
+            <div className="module-detail-meta flex items-center gap-4">
               {summary.latestPredictionDate && (
                 <div className="flex items-center gap-1.5 text-gray-400">
                   <Calendar className="h-3.5 w-3.5" />
@@ -435,86 +428,50 @@ export function HistoryDetail() {
         </div>
 
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+          <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("csv", summary.latestPredictionId, summary.forecastPeriod ?? 30)} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
             style={{ fontSize: "0.8125rem" }}>
-            <Download className="h-4 w-4" />
-            Exportar CSV
+<Download className="h-4 w-4" />Exportar CSV
           </button>
-          <button className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all"
+          <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("pdf", summary.latestPredictionId, summary.forecastPeriod ?? 30)} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
             style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-            <Download className="h-4 w-4" />
-            Exportar PDF
+<Download className="h-4 w-4" />Exportar PDF
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 rounded-xl border border-gray-200 bg-gray-100 p-1 w-fit mb-8">
-        {[
-          { id: "dashboard",  label: "Dashboard",          icon: BarChart3      },
-          { id: "purchase",   label: "Plan de compras",    icon: Package        },
-          { id: "evaluation", label: "Evaluación del plan", icon: ClipboardList },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${
-                activeTab === tab.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-              }`}
-              style={{ fontSize: "0.875rem", fontWeight: activeTab === tab.id ? 500 : 400 }}>
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <div className="analysis-surface analysis-detail-surface">
+      <AnalysisTabs tabs={[{id:"dashboard",label:"Demanda",icon:BarChart3},{id:"purchase",label:"Plan de compras",icon:Package},{id:"evaluation",label:"Evaluación del plan",icon:ClipboardList}]} active={activeTab} onChange={setActiveTab} />
 
       {/* ── DASHBOARD TAB ── */}
       {activeTab === "dashboard" && (
-        <div className="space-y-6">
+        <div className="analysis-content">
 
-          {/* KPI cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Demanda Total Prevista", value: `${Math.round(summary.totalForecastedUnits).toLocaleString()} uds`, icon: TrendingUp, iconColor: "text-cyan-500", iconBg: "bg-cyan-500/10 border-cyan-500/20" },
-              { label: "Productos Analizados",   value: summary.totalProducts.toString(),                                    icon: Package,   iconColor: "text-blue-500",   iconBg: "bg-blue-500/10 border-blue-500/20" },
-              { label: "Precisión Estimada",     value: summary.accuracy > 0 ? `${summary.accuracy}%` : "—",                icon: BarChart3, iconColor: "text-purple-500", iconBg: "bg-purple-500/10 border-purple-500/20" },
-              { label: "Horizonte Analizado",    value: `${summary.forecastPeriod ?? "—"} días`,                            icon: Calendar,  iconColor: "text-orange-500", iconBg: "bg-orange-500/10 border-orange-500/20" },
-            ].map((card) => {
-              const Icon = card.icon;
-              return (
-                <div key={card.label} className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${card.iconBg}`}>
-                    <Icon className={`h-6 w-6 ${card.iconColor}`} />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 mb-0.5" style={{ fontSize: "0.75rem" }}>{card.label}</p>
-                    <p className="text-gray-900" style={{ fontSize: "1.375rem", fontWeight: 700, lineHeight: 1.1 }}>{card.value}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <AnalysisMetrics items={[
+            {label:"Demanda prevista",icon:TrendingUp,value:`${Math.round(summary.totalForecastedUnits).toLocaleString()} uds`,emphasis:true},
+            {label:"Productos analizados",icon:Package,value:summary.totalProducts.toString()},
+            {label:"Precisión estimada",icon:BarChart3,value:summary.accuracy > 0 ? `${summary.accuracy}%` : "—"},
+            {label:"Horizonte",icon:Calendar,value:`${summary.forecastPeriod ?? "—"} días`},
+          ]}/>
 
           {/* Interactive Chart */}
           {summary.totalProducts > 0 ? (
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden relative">
+            <div className="analysis-chart relative">
               <AnimatePresence>
                 {sidebarOpen && (
                   <>
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }} className="absolute inset-0 bg-black/10 z-10"
+                      transition={{ duration: 0.2 }} className="absolute inset-0 analysis-chart-backdrop z-10"
                       onClick={() => setSidebarOpen(false)} />
                     <motion.div initial={{ x: -304 }} animate={{ x: 0 }} exit={{ x: -304 }}
                       transition={{ type: "spring", stiffness: 320, damping: 32 }}
-                      className="absolute top-0 left-0 bottom-0 w-72 bg-white border-r border-gray-200 z-20 flex flex-col shadow-2xl"
-                      style={{ borderRadius: "1rem 0 0 1rem" }}>
+                      className="analysis-medication-drawer absolute top-0 left-0 bottom-0 w-72 bg-white border-r border-gray-200 z-20 flex flex-col shadow-2xl"
+                      style={{ borderRadius: 0 }}>
                       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
                         <div>
                           <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>Medicamentos</p>
                           <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>{sidebarProducts.length} de {summary.productNames.length}</p>
                         </div>
-                        <button onClick={() => setSidebarOpen(false)}
+                        <button aria-label="Cerrar lista de medicamentos" onClick={() => setSidebarOpen(false)}
                           className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
                           <PanelLeftClose className="h-4 w-4" />
                         </button>
@@ -524,7 +481,7 @@ export function HistoryDetail() {
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                           <input type="text" placeholder="Buscar medicamento..." value={sidebarSearch}
                             onChange={(e) => setSidebarSearch(e.target.value)}
-                            className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 focus:bg-white transition-all"
+                            className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 focus:bg-white transition-all"
                             style={{ fontSize: "0.8125rem" }} />
                         </div>
                       </div>
@@ -538,13 +495,13 @@ export function HistoryDetail() {
                           const isSelected = name === selectedProduct;
                           return (
                             <button key={name} onClick={() => { setSelectedProduct(name); setSidebarOpen(false); }}
-                              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-cyan-500/5 border-r-2 border-r-cyan-500" : ""}`}>
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10">
-                                <span className="h-2 w-2 rounded-full bg-cyan-500" />
+                              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-blue-500/5 border-r-2 border-r-blue-500" : ""}`}>
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                                <span className="h-2 w-2 rounded-full bg-blue-500" />
                               </div>
-                              <p className={`flex-1 truncate ${isSelected ? "text-cyan-600" : "text-gray-900"}`}
+                              <p className={`flex-1 truncate ${isSelected ? "text-blue-600" : "text-gray-900"}`}
                                 style={{ fontSize: "0.8125rem", fontWeight: isSelected ? 600 : 500 }}>{name}</p>
-                              {isSelected && <CheckCircle className="h-4 w-4 text-cyan-500 shrink-0" />}
+                              {isSelected && <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />}
                             </button>
                           );
                         })}
@@ -557,23 +514,21 @@ export function HistoryDetail() {
               <div className="px-6 pt-5 pb-4 border-b border-gray-100">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setSidebarOpen((v) => !v)}
-                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400"}`}
+                    <button aria-label="Medicamentos" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((v) => !v)}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-blue-500/50 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400"}`}
                       style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                       {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
                       <span className="hidden sm:inline">Medicamentos</span>
                     </button>
                     <div>
-                      <p className="text-gray-900" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
+                      <p className="analysis-medication-title text-gray-900" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                         {selectedProduct || "Selecciona un medicamento"}
                       </p>
-                      <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
-                        {summary.forecastPeriod} días predichos
-                      </p>
+                      
                     </div>
                   </div>
                   <button onClick={() => setShowConfidence((v) => !v)}
-                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-500"}`}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-blue-500/40 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-500"}`}
                     style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                     {showConfidence ? "Ocultar" : "Mostrar"} intervalo de confianza
                   </button>
@@ -581,16 +536,16 @@ export function HistoryDetail() {
 
                 <div className="flex flex-wrap items-center gap-5 mt-3">
                   <div className="flex items-center gap-2">
-                    <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" /></svg>
+                    <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" /></svg>
                     <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Histórico</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
+                    <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
                     <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Predicción</span>
                   </div>
                   {showConfidence && (
                     <div className="flex items-center gap-2">
-                      <div className="h-3 w-6 rounded bg-cyan-400/20 border border-cyan-400/30" />
+                      <div className="h-3 w-6 rounded bg-blue-400/20 border border-blue-400/30" />
                       <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo ±11%</span>
                     </div>
                   )}
@@ -600,38 +555,37 @@ export function HistoryDetail() {
               <div className="px-2 py-4">
                 {chartLoading ? (
                   <div className="flex items-center justify-center h-[320px]">
-                    <Loader2 className="h-6 w-6 text-cyan-500 animate-spin" />
+                    <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
                   </div>
                 ) : (
                   <AnimatePresence mode="wait">
-                    <motion.div key={selectedProduct} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                    <div key={`${selectedProduct}-${chartData.length}`}>
                       <ResponsiveContainer width="100%" height={320}>
-                        <ComposedChart data={chartData} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
+                        <ComposedChart data={chartData.map((point, plotIndex) => ({ ...point, plotIndex }))} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
                           <defs>
                             <linearGradient id="confGradHD" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.15} />
-                              <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.02} />
+                              <stop offset="0%" stopColor="#007AFF" stopOpacity={0.15} />
+                              <stop offset="100%" stopColor="#007AFF" stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
-                          <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                          <XAxis dataKey="plotIndex" tickFormatter={(index) => chartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                          <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                           <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                          <ReferenceLine x={bridgeDateLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
-                            label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
-                          {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradHD)" connectNulls={false} isAnimationActive={false} />}
-                          {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
-                          <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
-                          <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
+                          <ReferenceLine x={chartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />
+                          {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradHD)" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
+                          {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
+                          <Line type="monotone" dataKey="historical" isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
+                          <Line type="monotone" dataKey="predicted" isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
-                    </motion.div>
+                    </div>
                   </AnimatePresence>
                 )}
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+            <div className="module-card rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
               <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>
                 No hay resultados de predicción disponibles para esta ejecución.
               </p>
@@ -639,7 +593,7 @@ export function HistoryDetail() {
           )}
 
           {/* Products table (backend-paginated) */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="analysis-table-section">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div>
                 <h3 className="text-gray-900 mb-0.5" style={{ fontWeight: 600 }}>Medicamentos analizados</h3>
@@ -651,14 +605,14 @@ export function HistoryDetail() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 <input type="text" placeholder="Buscar producto..." value={resultsSearch}
                   onChange={(e) => { setResultsSearch(e.target.value); setResultsPage(1); }}
-                  className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 transition-colors"
+                  className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
                   style={{ fontSize: "0.8125rem" }} />
               </div>
             </div>
 
             {productsLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 text-cyan-500 animate-spin" />
+                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -676,21 +630,21 @@ export function HistoryDetail() {
                       const varNum = getVariation(p);
                       const isUp = varNum > 5;
                       const isDown = varNum < -5;
-                      const trendColor = isUp ? "text-cyan-500" : isDown ? "text-red-500" : "text-gray-400";
-                      const trendBg = isUp ? "bg-cyan-500/10" : isDown ? "bg-red-500/10" : "bg-gray-100";
+                      const trendColor = isUp ? "text-blue-500" : isDown ? "text-red-500" : "text-gray-400";
+                      const trendBg = isUp ? "bg-blue-500/10" : isDown ? "bg-red-500/10" : "bg-gray-100";
                       const TrendIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
                       return (
                         <tr key={p.productName} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</td>
                           <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{hist} uds</td>
-                          <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{Math.round(p.avgPredictedQuantity)} uds</td>
+                          <td className="py-3 pr-3 text-blue-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{Math.round(p.avgPredictedQuantity)} uds</td>
                           <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
-                            <span className={varNum > 0 ? "text-cyan-500" : "text-red-500"} style={{ fontWeight: 500 }}>
+                            <span className="analysis-variation" style={{ fontWeight: 500 }}>
                               {varNum > 0 ? "+" : ""}{varNum.toFixed(1)}%
                             </span>
                           </td>
                           <td className="py-3">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${trendBg} ${trendColor}`}
+                            <span className="analysis-trend"
                               style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
                               <TrendIcon className="h-3 w-3" />
                               {isUp ? "Al alza" : isDown ? "A la baja" : "Estable"}
@@ -716,8 +670,8 @@ export function HistoryDetail() {
 
       {/* ── PURCHASE PLAN TAB ── */}
       {activeTab === "purchase" && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="analysis-content">
+          <div className="analysis-plan-heading flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Plan de compras recomendado</h2>
               <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>
@@ -726,58 +680,28 @@ export function HistoryDetail() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Total productos",   value: summary.totalProducts.toString(),   icon: Package,   color: "text-blue-500",   bg: "bg-blue-500/10 border-blue-500/20" },
-              { label: "Ítems críticos",    value: summary.criticalCount.toString(),   icon: AlertCircle, color: "text-red-500",  bg: "bg-red-500/10 border-red-500/20" },
-              { label: "Inversión estimada", value: "—",                               icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
-              { label: "Horizonte del plan", value: `${summary.forecastPeriod ?? "—"} días`, icon: Calendar, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
-            ].map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <div key={stat.label} className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${stat.bg}`}>
-                    <Icon className={`h-6 w-6 ${stat.color}`} />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 mb-0.5" style={{ fontSize: "0.75rem" }}>{stat.label}</p>
-                    <p className="text-gray-900" style={{ fontSize: "1.375rem", fontWeight: 700, lineHeight: 1.1 }}>{stat.value}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <AnalysisMetrics items={[
+            {label:"Productos a comprar",icon:Package,value:summary.totalProducts.toString(),emphasis:true},
+            {label:"Ítems críticos",icon:AlertCircle,value:summary.criticalCount.toString()},
+            {label:"Inversión estimada",icon:TrendingUp,value:"—"},
+            {label:"Horizonte",icon:Calendar,value:`${summary.forecastPeriod ?? "—"} días`},
+          ]}/>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2 flex-wrap">
-              {["all", "critical", "high", "medium", "low"].map((pri) => {
-                const labels: Record<string, string> = { all: "Todos", critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo" };
-                return (
-                  <button key={pri} onClick={() => { setFilterPriority(pri); setPlanPage(1); }}
-                    className={`rounded-lg border px-3 py-1.5 transition-all ${
-                      filterPriority === pri
-                        ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-500"
-                        : "border-gray-300 bg-white text-gray-500 hover:text-gray-700"
-                    }`}
-                    style={{ fontSize: "0.8125rem" }}>
-                    {labels[pri]}
-                  </button>
-                );
-              })}
-            </div>
+            <PriorityFilter value={filterPriority} onChange={(priority) => { setFilterPriority(priority); setPlanPage(1); }}/>
             <div className="relative ml-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
               <input type="text" placeholder="Buscar producto..." value={planSearch}
                 onChange={(e) => { setPlanSearch(e.target.value); setPlanPage(1); }}
-                className="w-56 rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 transition-colors"
+                className="w-56 rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
                 style={{ fontSize: "0.8125rem" }} />
             </div>
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="analysis-table-section">
             {productsLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 text-cyan-500 animate-spin" />
+                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -795,7 +719,7 @@ export function HistoryDetail() {
                       return (
                         <tr key={p.productName} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</td>
-                          <td className="px-4 py-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{Math.round(p.totalPredictedQuantity)} uds</td>
+                          <td className="px-4 py-3 text-blue-500" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{Math.round(p.totalPredictedQuantity)} uds</td>
                           <td className="px-4 py-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{Math.round(p.avgPredictedQuantity)} uds/día</td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${pConf.bg} ${pConf.border} ${pConf.color}`}
@@ -820,13 +744,7 @@ export function HistoryDetail() {
           </div>
 
           {/* ── hint to go to evaluation tab ── */}
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 px-6 py-4 flex items-center gap-3">
-            <ClipboardCheck className="h-4 w-4 text-gray-400 shrink-0" />
-            <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>
-              Para comparar este plan con las ventas reales del período, ve a la pestaña{" "}
-              <button onClick={() => setActiveTab("evaluation" as any)} className="text-cyan-600 hover:underline font-medium">Evaluación del plan</button>.
-            </p>
-          </div>
+
         </div>
       )}
 
@@ -836,16 +754,13 @@ export function HistoryDetail() {
 
           {/* Upload form card */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-            className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            className="module-card rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
             {/* Header */}
-            <div className="px-6 py-5 flex items-center justify-between gap-3 border-b border-gray-100">
+            <div className="analysis-evaluation-heading px-6 py-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/20 shrink-0">
-                  <ClipboardCheck className="h-5 w-5 text-cyan-500" />
-                </div>
                 <div>
-                  <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "1rem" }}>Evaluar plan de compras</p>
+                  <h2 className="text-gray-900">Evaluar plan de compras</h2>
                   <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>
                     Compara lo que PharmaCast recomendó con las ventas reales del período
                   </p>
@@ -864,7 +779,7 @@ export function HistoryDetail() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-gray-800" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>Ventas reales del período</p>
-                  <span className="rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-cyan-600" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>Requerido</span>
+                  <span className="rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-blue-600" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>Requerido</span>
                 </div>
 
                 <input ref={salesFileRef} type="file" accept=".csv,.xls,.xlsx" className="hidden"
@@ -878,11 +793,11 @@ export function HistoryDetail() {
                     onDragLeave={() => setSalesDragging(false)}
                     onDrop={(e) => { e.preventDefault(); setSalesDragging(false); const f = e.dataTransfer.files[0]; if (f) handleSalesFile(f); }}
                     className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-10 cursor-pointer transition-all ${
-                      salesDragging ? "border-cyan-400 bg-cyan-500/5" : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100/50"
+                      salesDragging ? "border-blue-400 bg-blue-500/5" : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100/50"
                     }`}
                   >
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all ${salesDragging ? "bg-cyan-500/10 border-cyan-500/20" : "bg-white border-gray-200"}`}>
-                      <UploadCloud className={`h-6 w-6 ${salesDragging ? "text-cyan-500" : "text-gray-400"}`} />
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all ${salesDragging ? "bg-blue-500/10 border-blue-500/20" : "bg-white border-gray-200"}`}>
+                      <UploadCloud className={`h-6 w-6 ${salesDragging ? "text-blue-500" : "text-gray-400"}`} />
                     </div>
                     <div className="text-center">
                       <p className="text-gray-700" style={{ fontWeight: 500, fontSize: "0.875rem" }}>
@@ -896,18 +811,18 @@ export function HistoryDetail() {
                   <div className="rounded-2xl border border-gray-200 overflow-hidden">
                     {/* File header bar */}
                     <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/20 shrink-0">
-                        <FileText className="h-4 w-4 text-cyan-500" />
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20 shrink-0">
+                        <FileText className="h-4 w-4 text-blue-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-gray-800 truncate" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{evalSalesFile.name}</p>
                         <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
                           {formatFileSize(evalSalesFile.size)} ·{" "}
-                          <span className="uppercase font-medium text-cyan-600">{evalSalesFile.name.split(".").pop()}</span>
+                          <span className="uppercase font-medium text-blue-600">{evalSalesFile.name.split(".").pop()}</span>
                         </p>
                       </div>
                       {salesColsLoading ? (
-                        <Loader2 className="h-4 w-4 text-cyan-500 animate-spin shrink-0" />
+                        <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
                       ) : salesColumns.length > 0 ? (
                         <span className="flex items-center gap-1 text-emerald-600 shrink-0" style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                           <CheckCircle className="h-3.5 w-3.5" /> {salesColumns.length} columnas
@@ -935,7 +850,7 @@ export function HistoryDetail() {
                             </label>
                             <select value={value} onChange={(e) => set(e.target.value)}
                               className={`w-full rounded-xl border px-3 py-2 text-gray-900 outline-none transition-colors ${
-                                required && value ? "border-emerald-400 bg-emerald-50/30 focus:border-emerald-500" : "border-gray-200 bg-white focus:border-cyan-500/60"
+                                required && value ? "border-emerald-400 bg-emerald-50/30 focus:border-emerald-500" : "border-gray-200 bg-white focus:border-blue-500/60"
                               }`}
                               style={{ fontSize: "0.8125rem" }}>
                               <option value="">{placeholder}</option>
@@ -966,11 +881,11 @@ export function HistoryDetail() {
                     onDragLeave={() => setPharmDragging(false)}
                     onDrop={(e) => { e.preventDefault(); setPharmDragging(false); const f = e.dataTransfer.files[0]; if (f) handlePharmFile(f); }}
                     className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-8 cursor-pointer transition-all ${
-                      pharmDragging ? "border-cyan-400 bg-cyan-500/5" : "border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-100/30"
+                      pharmDragging ? "border-blue-400 bg-blue-500/5" : "border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-100/30"
                     }`}
                   >
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all ${pharmDragging ? "bg-cyan-500/10 border-cyan-500/20" : "bg-white border-gray-200"}`}>
-                      <UploadCloud className={`h-5 w-5 ${pharmDragging ? "text-cyan-500" : "text-gray-300"}`} />
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all ${pharmDragging ? "bg-blue-500/10 border-blue-500/20" : "bg-white border-gray-200"}`}>
+                      <UploadCloud className={`h-5 w-5 ${pharmDragging ? "text-blue-500" : "text-gray-300"}`} />
                     </div>
                     <div className="text-center">
                       <p className="text-gray-500" style={{ fontWeight: 500, fontSize: "0.875rem" }}>
@@ -992,7 +907,7 @@ export function HistoryDetail() {
                         </p>
                       </div>
                       {pharmColsLoading ? (
-                        <Loader2 className="h-4 w-4 text-cyan-500 animate-spin shrink-0" />
+                        <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
                       ) : pharmColumns.length > 0 ? (
                         <span className="flex items-center gap-1 text-emerald-600 shrink-0" style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                           <CheckCircle className="h-3.5 w-3.5" /> {pharmColumns.length} columnas
@@ -1016,7 +931,7 @@ export function HistoryDetail() {
                             </label>
                             <select value={value} onChange={(e) => set(e.target.value)}
                               className={`w-full rounded-xl border px-3 py-2 text-gray-900 outline-none transition-colors ${
-                                value ? "border-emerald-400 bg-emerald-50/30 focus:border-emerald-500" : "border-gray-200 bg-white focus:border-cyan-500/60"
+                                value ? "border-emerald-400 bg-emerald-50/30 focus:border-emerald-500" : "border-gray-200 bg-white focus:border-blue-500/60"
                               }`}
                               style={{ fontSize: "0.8125rem" }}>
                               <option value="">— selecciona —</option>
@@ -1085,7 +1000,7 @@ export function HistoryDetail() {
                       setPlanEvalLoading(false);
                     }
                   }}
-                  className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-white hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white hover:bg-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   style={{ fontSize: "0.875rem", fontWeight: 600 }}
                 >
                   {planEvalLoading
@@ -1098,18 +1013,18 @@ export function HistoryDetail() {
 
           {/* Results */}
           {planEvalResult && (
-            <div ref={evalResultRef} className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div ref={evalResultRef} className="module-card rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
               {/* KPI cards */}
               <div className="px-6 py-5 border-b border-gray-100">
                 <p className="text-gray-900 mb-4" style={{ fontWeight: 700, fontSize: "1rem" }}>Resultado</p>
                 <div className={`grid gap-4 ${planEvalResult.summary.hasPharmacyPlan ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
-                  <div className="rounded-xl bg-cyan-50 border border-cyan-100 p-4">
-                    <p className="text-cyan-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Efectividad PharmaCast</p>
-                    <p className="text-cyan-700" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.1 }}>
+                  <div className="rounded-xl bg-blue-50 border border-blue-100 p-4">
+                    <p className="text-blue-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Efectividad PharmaCast</p>
+                    <p className="text-blue-700" style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.1 }}>
                       {planEvalResult.summary.pharmaCastGoodPct}%
                     </p>
-                    <p className="text-cyan-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
+                    <p className="text-blue-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
                       {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmaCastAvgMape}%
                     </p>
                   </div>
@@ -1187,9 +1102,9 @@ export function HistoryDetail() {
                                 <p className="text-gray-500 font-medium text-center mb-4" style={{ fontSize: "0.875rem" }}>Ningún producto coincidió — nombres distintos entre plan y CSV</p>
                                 <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
                                   {planSampleNames.length > 0 && (
-                                    <div className="rounded-xl border border-cyan-100 bg-cyan-50/50 p-3">
-                                      <p className="text-cyan-700 mb-2" style={{ fontSize: "0.75rem", fontWeight: 600 }}>El plan espera nombres como:</p>
-                                      {planSampleNames.map((n, i) => <p key={i} className="text-cyan-600 font-mono truncate" style={{ fontSize: "0.7rem" }}>{n}</p>)}
+                                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                                      <p className="text-blue-700 mb-2" style={{ fontSize: "0.75rem", fontWeight: 600 }}>El plan espera nombres como:</p>
+                                      {planSampleNames.map((n, i) => <p key={i} className="text-blue-600 font-mono truncate" style={{ fontSize: "0.7rem" }}>{n}</p>)}
                                     </div>
                                   )}
                                   {csvSampleNames.length > 0 && (
@@ -1263,7 +1178,7 @@ export function HistoryDetail() {
                           onClick={() => setChartLimit(n)}
                           className={`rounded-lg border px-3 py-1 transition-all ${
                             chartLimit === n
-                              ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-600"
+                              ? "border-blue-500/50 bg-blue-500/10 text-blue-600"
                               : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
                           }`}
                           style={{ fontSize: "0.75rem", fontWeight: 500 }}
@@ -1311,8 +1226,8 @@ export function HistoryDetail() {
                       }}
                     />
                     <Legend wrapperStyle={{ paddingTop: 8 }} formatter={(v) => <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{v}</span>} />
-                    <Line type="monotone" dataKey="actual" name="Vendido real" stroke="#3b82f6" strokeWidth={2.5} dot={false} />
-                    <Line type="monotone" dataKey="pharmaCast" name="Plan PharmaCast" stroke="#06b6d4" strokeWidth={2.5} dot={false} />
+                    <Line type="monotone" dataKey="actual" name="Vendido real" stroke="#007AFF" strokeWidth={2.5} dot={false} />
+                    <Line type="monotone" dataKey="pharmaCast" name="Plan PharmaCast" stroke="#007AFF" strokeWidth={2.5} dot={false} />
                     {planEvalResult.summary.hasPharmacyPlan && (
                       <Line type="monotone" dataKey="botica" name="Plan Botica" stroke="#f97316" strokeWidth={2} strokeDasharray="5 3" dot={false} />
                     )}
@@ -1327,6 +1242,7 @@ export function HistoryDetail() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }

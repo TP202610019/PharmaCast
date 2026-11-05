@@ -1,47 +1,23 @@
 import { Link } from "react-router";
-import { Activity } from "lucide-react";
+import { ArrowUpRight, ArrowUp } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { PharmaCastLogo } from "./PharmaCastLogo";
+import "../../styles/chrome.css";
 
-export function Footer() {
-  const year = 2026;
+export function Footer({ workspace = false }: { workspace?: boolean } = {}) {
+  const { isLoggedIn } = useAuth();
+  return <footer className={`pc-footer ${workspace ? "pc-workspace-footer" : ""}`}><div className="pc-footer-inner">
+    <div className="pc-footer-top">
+      <div className="pc-footer-about"><Link to={isLoggedIn ? "/panel" : "/"} className="pc-brand" aria-label="PharmaCast, inicio"><PharmaCastLogo /></Link><p>Predicción de demanda y planificación de compras para farmacias. Convierte tu historial de ventas en información para preparar tu próxima compra.</p></div>
+      {workspace ? <>
+        <nav aria-label="Tu espacio"><h2>Tu espacio</h2><Link to="/panel">Mi panel</Link><Link to="/predicciones/nueva">Nueva predicción</Link><Link to="/historial">Historial de predicciones</Link></nav>
+        <nav aria-label="Legal"><h2>Legal</h2><Link to="/terminos?from=workspace">Términos y condiciones</Link></nav>
+      </> : <>
+      <nav aria-label="Producto"><h2>Producto</h2><a href="/#producto">Conoce PharmaCast</a><a href="/#datos">Carga de datos</a><a href="/#procesamiento">Procesamiento</a><a href="/#compras">Plan de compras</a><a href="/#precision">Precisión del análisis</a></nav>
+      <nav aria-label="Tu cuenta"><h2>Tu cuenta</h2>{isLoggedIn ? <><Link to="/panel">Mi panel</Link><Link to="/predicciones/nueva">Nueva predicción</Link><Link to="/historial">Historial</Link></> : <><Link to="/registro">Crear una cuenta <ArrowUpRight size={12}/></Link><Link to="/acceso">Iniciar sesión</Link></>}</nav>
+      <nav aria-label="Legal"><h2>Legal</h2><Link to="/terminos">Términos y condiciones</Link></nav>
+      </>}
 
-  return (
-    <footer className="border-t border-gray-200 bg-white mt-auto">
-      <div className="max-w-6xl mx-auto px-6 py-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          {/* Brand */}
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/10">
-              <Activity className="h-3.5 w-3.5 text-cyan-500" />
-            </div>
-            <span className="text-gray-500" style={{ fontSize: "0.8125rem" }}>
-              <span style={{ fontWeight: 600, color: "#111827" }}>PharmaCast</span>
-              {" "}© {year}
-            </span>
-          </div>
-
-          {/* Links */}
-          <nav className="flex items-center gap-1">
-            {[
-              { label: "Términos y Condiciones", to: "/terms" },
-              { label: "Privacidad", to: "/terms" },
-              { label: "Soporte", to: "/terms" },
-            ].map((link, i, arr) => (
-              <span key={link.label} className="flex items-center gap-1">
-                <Link
-                  to={link.to}
-                  className="text-gray-400 hover:text-cyan-500 transition-colors"
-                  style={{ fontSize: "0.8125rem" }}
-                >
-                  {link.label}
-                </Link>
-                {i < arr.length - 1 && (
-                  <span className="text-gray-200 select-none" style={{ fontSize: "0.75rem" }}>·</span>
-                )}
-              </span>
-            ))}
-          </nav>
-        </div>
-      </div>
-    </footer>
-  );
+    </div><a className="pc-back-top" aria-label="Volver arriba" title="Volver arriba" href="#" onClick={e=>{e.preventDefault();window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});}}><ArrowUp size={18}/></a><div className="pc-footer-bottom"><span>© {new Date().getFullYear()} PharmaCast.</span><span>Predicción de demanda · Planificación de compras</span></div>
+  </div></footer>;
 }

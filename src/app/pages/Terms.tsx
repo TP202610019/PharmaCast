@@ -1,5 +1,9 @@
-import { Link } from "react-router";
-import { Activity, ArrowLeft, Shield, FileText, Database, Lock, AlertCircle, RefreshCw } from "lucide-react";
+import { Navbar } from "../components/Navbar";
+import { Footer } from "../components/Footer";
+import { PharmaCastLogo } from "../components/PharmaCastLogo";
+import "../../styles/terms.css";
+import { Link, useSearchParams } from "react-router";
+import { Activity, ArrowLeft, ArrowRight, Shield, FileText, Database, Lock, AlertCircle, RefreshCw } from "lucide-react";
 
 const sections = [
   {
@@ -53,106 +57,24 @@ const sections = [
 ];
 
 export function Terms() {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header bar */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30 group-hover:bg-cyan-500/20 transition-colors">
-              <Activity className="h-4 w-4 text-cyan-500" />
-            </div>
-            <div className="flex flex-col leading-none">
-              <span className="text-gray-900 tracking-tight" style={{ fontSize: "0.875rem", fontWeight: 700 }}>
-                PharmaCast
-              </span>
-              <span className="text-gray-400" style={{ fontSize: "0.55rem", letterSpacing: "0.1em" }}>
-                PREDICTION SYSTEM
-              </span>
-            </div>
-          </Link>
-          <Link
-            to="/register"
-            className="inline-flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors"
-            style={{ fontSize: "0.875rem" }}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver al registro
-          </Link>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        {/* Hero */}
-        <div className="mb-12">
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 mb-4">
-            <FileText className="h-3.5 w-3.5 text-cyan-600" />
-            <span className="text-cyan-600" style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
-              Documento legal
-            </span>
-          </div>
-          <h1 className="text-gray-900 mb-3" style={{ fontSize: "2rem", fontWeight: 700, lineHeight: 1.2 }}>
-            Términos y Condiciones
-          </h1>
-          <p className="text-gray-500" style={{ fontSize: "0.9375rem", lineHeight: 1.7 }}>
-            Última actualización: 7 de mayo de 2026
-          </p>
-          <p className="text-gray-500 mt-2" style={{ fontSize: "0.9375rem", lineHeight: 1.7 }}>
-            Por favor, lea detenidamente estos términos antes de utilizar la plataforma PharmaCast. El uso del servicio implica la aceptación de las condiciones descritas a continuación.
-          </p>
-        </div>
-
-        {/* Sections */}
-        <div className="space-y-6">
-          {sections.map((section) => {
-            const Icon = section.icon;
-            return (
-              <div key={section.title} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/20 mt-0.5">
-                    <Icon className="h-4 w-4 text-cyan-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-gray-900 mb-3" style={{ fontSize: "1rem", fontWeight: 600 }}>
-                      {section.title}
-                    </h2>
-                    <p className="text-gray-600" style={{ fontSize: "0.9rem", lineHeight: 1.75 }}>
-                      {section.content}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Contact */}
-        <div className="mt-8 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-6">
-          <h3 className="text-cyan-700 mb-2" style={{ fontSize: "0.9375rem", fontWeight: 600 }}>
-            ¿Tienes preguntas sobre estos términos?
-          </h3>
-          <p className="text-gray-600" style={{ fontSize: "0.875rem", lineHeight: 1.6 }}>
-            Si tienes alguna duda sobre estos Términos y Condiciones o sobre el uso de la plataforma, puedes contactarnos en{" "}
-            <span className="text-cyan-600 font-medium">legal@pharmacast.io</span>. Nos comprometemos a responder en un plazo de 48 horas hábiles.
-          </p>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-10 pt-8 border-t border-gray-200 flex flex-wrap items-center justify-between gap-4">
-          <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>
-            © 2026 PharmaCast · Todos los derechos reservados
-          </p>
-          <div className="flex gap-4">
-            <Link to="/login" className="text-cyan-500 hover:text-cyan-600 transition-colors" style={{ fontSize: "0.8125rem" }}>
-              Iniciar sesión
-            </Link>
-            <Link to="/register" className="text-cyan-500 hover:text-cyan-600 transition-colors" style={{ fontSize: "0.8125rem" }}>
-              Crear cuenta
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const [params] = useSearchParams();
+  const fromRegister = params.get("from") === "register";
+  const fromLogin = params.get("from") === "login";
+  const fromWorkspace = params.get("from") === "workspace";
+  const fromAuth = fromRegister || fromLogin;
+  const backPath = fromRegister ? "/registro" : fromLogin ? "/acceso" : fromWorkspace ? "/panel" : "/";
+  const backLabel = fromRegister ? "Volver al registro" : fromLogin ? "Volver al login" : fromWorkspace ? "Volver a Mi panel" : "Volver al inicio";
+  return <div className={`terms-page ${fromAuth ? "terms-from-auth" : ""}`}>
+    <Navbar backLink={fromAuth || fromWorkspace ? { to: backPath, label: backLabel } : undefined} />
+    <main className="terms-container">
+      <div className="terms-intro">{!fromAuth && !fromWorkspace && <Link className="terms-page-return" to={backPath}><ArrowLeft size={15}/>{backLabel}</Link>}<h1>Términos y<br/><span>condiciones.</span></h1><div className="terms-meta"><FileText size={14}/><span>Última actualización: 7 de mayo de 2026</span><span>8 apartados</span></div><p>Conoce las condiciones de uso de PharmaCast, el tratamiento de tu información y el alcance de las recomendaciones de la plataforma.</p></div>
+      <div className="terms-layout"><aside className="terms-index"><span>EN ESTE DOCUMENTO</span><nav aria-label="Índice de términos">{sections.map((section,i)=><a key={section.title} href={`#term-${i+1}`}><small>{String(i+1).padStart(2,"0")}</small>{section.title.replace(/^\d+\. /,"")}</a>)}</nav></aside>
+      <article className="terms-document">{sections.map((section,i)=><section id={`term-${i+1}`} key={section.title}><span className="terms-number">{String(i+1).padStart(2,"0")}</span><div><h2>{section.title.replace(/^\d+\. /,"")}</h2><p>{section.content}</p></div></section>)}
+      <div className="terms-contact"><h2>¿Tienes preguntas?</h2><p>Si tienes alguna duda sobre estas condiciones, escribe a <a href="mailto:legal@pharmacast.io">legal@pharmacast.io</a>.</p></div>
+      <div className="terms-document-end"><span>Fin del documento</span></div>
+      </article></div>
+      
+    </main>
+    {fromAuth ? <div className="terms-auth-bottom">© 2026 PharmaCast</div> : <Footer workspace={fromWorkspace} />}
+  </div>;
 }

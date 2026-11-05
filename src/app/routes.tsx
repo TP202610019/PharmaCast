@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, redirect } from "react-router";
 import { Root } from "./components/Root";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
@@ -20,20 +20,28 @@ function NotFound() {
 }
 
 export const router = createBrowserRouter([
+  { path: "/forgot-password", loader: () => redirect("/acceso/recuperar") },
+  { path: "/register", loader: () => redirect("/registro") },
+  { path: "/login", loader: () => redirect("/acceso") },
+  { path: "/terms", loader: () => redirect("/terminos") },
+  { path: "/dashboard", loader: () => redirect("/panel") },
+  { path: "/prediction", loader: () => redirect("/predicciones/nueva") },
+  { path: "/history", loader: () => redirect("/historial") },
+  { path: "/history/:id", loader: ({ params }) => redirect(`/historial/${params.id}`) },
   {
-    path: "/login",
+    path: "/acceso",
     Component: Login,
   },
   {
-    path: "/register",
+    path: "/registro",
     Component: Register,
   },
   {
-    path: "/forgot-password",
+    path: "/acceso/recuperar",
     Component: ForgotPassword,
   },
   {
-    path: "/terms",
+    path: "/terminos",
     Component: Terms,
   },
   {
@@ -41,11 +49,26 @@ export const router = createBrowserRouter([
     Component: Root,
     children: [
       { index: true, Component: Home },
-      { path: "dashboard", Component: Dashboard },
-      { path: "prediction", Component: PredictionFlow },
-      { path: "history", Component: History },
-      { path: "history/:id", Component: HistoryDetail },
+      { path: "panel", Component: Dashboard },
+      { path: "predicciones/nueva", Component: PredictionFlow },
+      { path: "historial", Component: History },
+      { path: "historial/:id", Component: HistoryDetail },
       { path: "*", Component: NotFound },
     ],
   },
 ]);
+
+// Reset page navigation, while preserving intentional links to a section.
+let lastScrollLocationKey = router.state.location.key;
+router.subscribe((state) => {
+  if (state.navigation.state !== "idle" || state.location.key === lastScrollLocationKey) return;
+  lastScrollLocationKey = state.location.key;
+  const hash = state.location.hash;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (hash) {
+      document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+  }));
+});

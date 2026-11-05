@@ -15,7 +15,7 @@ interface AuthContextType {
   isLoggedIn: boolean;
   user: UserData | null;
   login: (email: string, password: string) => Promise<void>;
-  loginDemo: () => void;
+  loginDemo: () => Promise<void>;
   register: (fullName: string, email: string, password: string, pharmacy?: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserData>) => void;
@@ -25,7 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
   user: null,
   login: async () => {},
-  loginDemo: () => {},
+  loginDemo: async () => {},
   register: async () => {},
   logout: async () => {},
   updateUser: () => {},
@@ -68,18 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoggedIn(true);
   }, []);
 
-  const loginDemo = useCallback(() => {
-    const demoUser: UserData = {
-      id: "demo",
-      name: "Dr. Demo",
-      email: "demo@pharmacast.com",
-      pharmacy: "Farmacia PharmaCast",
-    };
-    localStorage.setItem(STORAGE.AUTH, "true");
-    saveUser(demoUser);
-    setUser(demoUser);
-    setIsLoggedIn(true);
-  }, []);
+  const loginDemo = useCallback(async () => {
+    const email = import.meta.env.VITE_DEMO_EMAIL;
+    const password = import.meta.env.VITE_DEMO_PASSWORD;
+    if (!import.meta.env.DEV || !email || !password) throw new Error("La cuenta demo no está configurada en este entorno.");
+    await login(email, password);
+  }, [login]);
 
   const register = useCallback(async (
     fullName: string,

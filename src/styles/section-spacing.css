@@ -1,0 +1,12 @@
+/* Current section spacing reduced by 25 percent. */
+#root .ph-home .ph-benefits{padding-top:98.0858px!important;padding-bottom:84.375px!important}
+#root .ph-home .ph-story-intro{padding-top:59.0625px!important;padding-bottom:0!important}
+#root .ph-home .ps-upload{padding-top:33.75px!important;padding-bottom:84.375px!important}
+#root .ph-home .ps-processing,#root .ph-home .ps-purchase,#root .ph-home .ps-validation,#root .ph-home .ph-faq{padding-top:84.375px!important;padding-bottom:84.375px!important}
+@media(max-width:700px){#root .ph-home .ph-benefits{padding-top:72.7734px!important;padding-bottom:64.3359px!important}#root .ph-home .ph-story-intro{padding-top:45.3516px!important;padding-bottom:0!important}#root .ph-home .ps-upload{padding-top:25.3125px!important;padding-bottom:64.3359px!important}#root .ph-home .ps-processing,#root .ph-home .ps-purchase,#root .ph-home .ps-validation,#root .ph-home .ph-faq{padding-top:64.3359px!important;padding-bottom:64.3359px!important}}
+
+/* Shared page edges: 1240px shell with 40px gutters (1160px content). */
+#root .ph-section,#root .workspace-root main>.workspace-page,#root .workspace-root main>.prediction-page{max-width:1240px;width:100%;margin-inline:auto;padding-left:40px;padding-right:40px;box-sizing:border-box}
+#root .ph-final-band{padding-left:40px;padding-right:40px}
+#root .ph-final-band .ph-final{max-width:1160px;width:100%;box-sizing:border-box}
+@media(max-width:767px){#root .ph-section,#root .workspace-root main>.workspace-page,#root .workspace-root main>.prediction-page{padding-left:24px;padding-right:24px}#root .ph-final-band{padding-left:24px;padding-right:24px}}
