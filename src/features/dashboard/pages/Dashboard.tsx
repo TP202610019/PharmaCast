@@ -589,7 +589,7 @@ export function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <button onClick={() => setShowConfidence((v) => !v)}
+                      <button disabled={!chartData.some(p => p.upper != null && p.lower != null)} onClick={() => setShowConfidence((v) => !v)}
                         className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-500"}`}
                         style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                         {showConfidence ? "Ocultar" : "Mostrar"} intervalo de confianza
@@ -604,10 +604,10 @@ export function Dashboard() {
                         <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
                         <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Predicción</span>
                       </div>
-                      {showConfidence && (
+                      {showConfidence && chartData.some(p => p.upper != null && p.lower != null) && (
                         <div className="flex items-center gap-2">
                           <div className="h-3 w-6 rounded bg-cyan-400/20 border border-cyan-400/30" />
-                          <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo ±11%</span>
+                          <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo de predicción</span>
                         </div>
                       )}
                     </div>

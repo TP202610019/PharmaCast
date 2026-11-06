@@ -2,6 +2,9 @@ import http from "../lib/http";
 import type { ApiResponse, DatasetResponse } from "../types/api";
 
 export const datasetService = {
+  async confirm(id: string, mappingConfigurationId: string, fieldType: "sales" | "inventory" = "sales"): Promise<void> {
+    await http.post(`/api/datasets/${id}/confirm`, { mappingConfigurationId, fieldType });
+  },
   async upload(file: File, mappingConfigId?: string): Promise<DatasetResponse> {
     const form = new FormData();
     form.append("file", file);

@@ -8,6 +8,8 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { Paginator } from "@/shared/components/Paginator";
+import type { PredictionResponse } from "@/shared/types/api";
+import { PredictionMetrics } from "./PredictionMetrics";
 import { priorityConfig } from "../constants";
 import type { UIProduct, ChartPoint } from "@/shared/lib/transforms";
 
@@ -38,6 +40,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 interface Props {
+  prediction: PredictionResponse | null;
+  isDemo: boolean;
   products: UIProduct[];
   totalUnits: number;
   accuracy: number;
@@ -58,13 +62,15 @@ interface Props {
   productChartData: ChartPoint[];
   chartLoading: boolean;
   bridgeDateLabel: string;
-  tableData: (UIProduct & { avgHistorical: number; variation: number })[];
+  tableData: (UIProduct & { avgHistorical: number | null; predictedDaily: number; variation: number })[];
   sidebarProducts: UIProduct[];
-  searchedTableData: (UIProduct & { avgHistorical: number; variation: number })[];
-  paginatedTableData: (UIProduct & { avgHistorical: number; variation: number })[];
+  searchedTableData: (UIProduct & { avgHistorical: number | null; predictedDaily: number; variation: number })[];
+  paginatedTableData: (UIProduct & { avgHistorical: number | null; predictedDaily: number; variation: number })[];
 }
 
 export function StepResults({
+  prediction,
+  isDemo,
   products, totalUnits, accuracy, forecastDays,
   selectedProductId, setSelectedProductId,
   showConfidence, setShowConfidence,
@@ -77,12 +83,13 @@ export function StepResults({
 }: Props) {
   return (
     <div className="space-y-6">
+      {prediction && <PredictionMetrics prediction={prediction} />}
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Demanda Total Prevista", value: totalUnits > 0 ? `${totalUnits.toLocaleString()} uds` : "—", icon: TrendingUp, iconColor: "text-cyan-500",   iconBg: "bg-cyan-500/10 border-cyan-500/20" },
           { label: "Productos Analizados",   value: products.length > 0 ? products.length.toString() : "—",   icon: Package,    iconColor: "text-blue-500",   iconBg: "bg-blue-500/10 border-blue-500/20" },
-          { label: "Precisión Estimada",     value: accuracy > 0 ? `${accuracy}%` : "—",                      icon: BarChart3,  iconColor: "text-purple-500", iconBg: "bg-purple-500/10 border-purple-500/20" },
+          { label: isDemo ? "Precisión Referencial" : "Precisión Estimada", value: accuracy > 0 ? `${accuracy}%` : "—", icon: BarChart3, iconColor: "text-purple-500", iconBg: "bg-purple-500/10 border-purple-500/20" },
           { label: "Horizonte Analizado",    value: `${forecastDays} días`,                                    icon: Calendar,   iconColor: "text-orange-500", iconBg: "bg-orange-500/10 border-orange-500/20" },
         ].map((card) => {
           const Icon = card.icon;
@@ -170,7 +177,7 @@ export function StepResults({
         <div className="px-6 pt-5 pb-4 border-b border-gray-100">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <button onClick={() => setSidebarOpen((v) => !v)}
+              <button onClick={() => setSidebarOpen(!sidebarOpen)}
                 className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:text-gray-900"}`}
                 style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                 {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
@@ -185,7 +192,7 @@ export function StepResults({
                 </p>
               </div>
             </div>
-            <button onClick={() => setShowConfidence((v) => !v)}
+            <button disabled={!productChartData.some(p => p.upper != null && p.lower != null)} onClick={() => setShowConfidence(!showConfidence)}
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}
               style={{ fontSize: "0.75rem", fontWeight: 500 }}>
               {showConfidence ? "Ocultar" : "Mostrar"} intervalo de confianza
@@ -200,10 +207,10 @@ export function StepResults({
               <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
               <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Predicción</span>
             </div>
-            {showConfidence && (
+            {showConfidence && productChartData.some(p => p.upper != null && p.lower != null) && (
               <div className="flex items-center gap-2">
                 <div className="h-3 w-6 rounded bg-cyan-400/20 border border-cyan-400/30" />
-                <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo ±11%</span>
+                <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo de predicción</span>
               </div>
             )}
             <div className="flex items-center gap-2 ml-auto">
@@ -234,7 +241,7 @@ export function StepResults({
                     <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
                     <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
                     <ReferenceLine x={bridgeDateLabel} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3"
-                      label={{ value: "Hoy", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
+                      label={{ value: "Inicio predicción", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />
                     {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={false} />}
                     {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
                     <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
@@ -267,7 +274,7 @@ export function StepResults({
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Producto", "Categoría", "Dem. Histórica Prom.", "Demanda Predicha", "Variación (%)", "Tendencia"].map((h) => (
+                  {["Producto", "Categoría", "Dem. Histórica Prom.", "Dem. Predicha Prom.", "Variación (%)", "Tendencia"].map((h) => (
                     <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
                   ))}
                 </tr>
@@ -282,8 +289,8 @@ export function StepResults({
                     <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                       <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.name}</td>
                       <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.category}</td>
-                      <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical} uds</td>
-                      <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand} uds</td>
+                      <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical == null ? "—" : `${row.avgHistorical} uds/día`}</td>
+                      <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDaily} uds/día</td>
                       <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
                         <span className={varNum > 0 ? "text-cyan-500" : "text-red-500"} style={{ fontWeight: 500 }}>
                           {varNum > 0 ? "+" : ""}{varNum.toFixed(1)}%

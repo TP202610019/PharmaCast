@@ -18,7 +18,7 @@ const SALES_VARS = {
     { key: "category",  label: "Categoría",                desc: "Categoría del medicamento" },
   ],
   optional: [
-    { key: "price",          label: "Precio",               desc: "Precio de venta unitario" },
+    { key: "unit_price",     label: "Precio unitario",      desc: "Precio de venta por unidad" },
     { key: "product_type",   label: "Tipo de producto",     desc: "Clasificación adicional del producto" },
     { key: "unit",           label: "Unidad de medida",     desc: "Unidades, cajas, ampollas..." },
     { key: "payment_method", label: "Método de pago",       desc: "Efectivo, tarjeta, etc." },

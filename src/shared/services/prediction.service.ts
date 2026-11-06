@@ -4,12 +4,18 @@ import type {
   CreatePredictionRequest,
   PredictionResponse,
   PredictionSummaryResponse,
+  PredictionPeriodResponse,
 } from "../types/api";
 
 export const predictionService = {
+  async getPeriods(): Promise<PredictionPeriodResponse[]> {
+    const { data } = await http.get<PredictionPeriodResponse[] | ApiResponse<PredictionPeriodResponse[]>>("/api/predictions/periods");
+    return Array.isArray(data) ? data : data.data ?? [];
+  },
   async execute(datasetId: string, forecastPeriod: number, mappingConfigurationId?: string): Promise<PredictionResponse> {
     const body: CreatePredictionRequest = { datasetId, forecastPeriod, mappingConfigurationId };
-    const { data } = await http.post<ApiResponse<PredictionResponse>>("/api/predictions", body, { timeout: 180_000 });
+    // Allow a few seconds for backend timeout handling and the final response.
+    const { data } = await http.post<ApiResponse<PredictionResponse>>("/api/predictions", body, { timeout: 125_000 });
     return data.data!;
   },
 

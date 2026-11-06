@@ -313,7 +313,7 @@ export function TabEvaluation({
                   {planEvalResult.summary.pharmaCastGoodPct}%
                 </p>
                 <p className="text-cyan-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                  {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmaCastAvgMape}%
+                  {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmaCastWape}%
                 </p>
               </div>
               {planEvalResult.summary.hasPharmacyPlan && (
@@ -323,7 +323,7 @@ export function TabEvaluation({
                     {planEvalResult.summary.pharmacyGoodPct}%
                   </p>
                   <p className="text-orange-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                    {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmacyAvgMape ?? "—"}%
+                    {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmacyWape ?? "—"}%
                   </p>
                 </div>
               )}

@@ -181,11 +181,11 @@ export function StepAnalysis({
             </motion.div>
 
             <p className="text-gray-400 mb-4" style={{ fontSize: "0.75rem" }}>
-              Métricas del modelo · {files.reduce((s, f) => s + (f.rows || 0), 0).toLocaleString()} registros procesados
+              {prediction?.isDemo ? "Indicadores referenciales de la demostración" : "Métricas del modelo"} · {files.reduce((s, f) => s + (f.rows || 0), 0).toLocaleString()} registros procesados
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { label: "Precisión estimada",   value: prediction && accuracy > 0 ? `${accuracy}%` : "—", sub: "Alta confianza",       icon: TrendingUp, iconBg: "bg-cyan-500/10 border-cyan-500/20",   iconColor: "text-cyan-500",   valColor: "#0e7490" },
+                { label: prediction?.isDemo ? "Precisión referencial" : "Precisión estimada", value: prediction && accuracy > 0 ? `${accuracy}%` : "—", sub: prediction?.isDemo ? "Valor preparado para la presentación" : "Basada en evaluación", icon: TrendingUp, iconBg: "bg-cyan-500/10 border-cyan-500/20", iconColor: "text-cyan-500", valColor: "#0e7490" },
                 { label: "Productos analizados", value: prediction ? `${products.length}` : "—",           sub: "En el dataset",        icon: Package,    iconBg: "bg-blue-500/10 border-blue-500/20",   iconColor: "text-blue-500",   valColor: "#1d4ed8" },
                 { label: "Período predicho",     value: `${forecastDays} días`,                            sub: "Horizonte de análisis", icon: Activity,   iconBg: "bg-purple-500/10 border-purple-500/20", iconColor: "text-purple-500", valColor: "#7c3aed" },
               ].map((m, idx) => {

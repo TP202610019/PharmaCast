@@ -89,6 +89,9 @@ export function PredictionFlow() {
               files={flow.files}
               forecastDays={flow.forecastDays}
               setForecastDays={flow.setForecastDays}
+              periods={flow.periods}
+              periodsLoading={flow.periodsLoading}
+              catalogError={flow.catalogError}
               mappingTab={flow.mappingTab}
               setMappingTab={flow.setMappingTab}
               salesMapping={flow.salesMapping}
@@ -132,6 +135,8 @@ export function PredictionFlow() {
 
           {flow.currentStep === 4 && (
             <StepResults
+              prediction={flow.prediction}
+              isDemo={flow.prediction?.isDemo ?? false}
               products={flow.products}
               totalUnits={flow.totalUnits}
               accuracy={flow.accuracy}
@@ -178,6 +183,7 @@ export function PredictionFlow() {
       </AnimatePresence>
 
       {/* Navigation */}
+      {flow.planError && <p role="alert" className="mt-4 text-sm text-red-600">{flow.planError}</p>}
       <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
         <button
           onClick={() => flow.setCurrentStep((s) => Math.max(1, s - 1))}

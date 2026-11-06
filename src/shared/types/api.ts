@@ -200,6 +200,22 @@ export interface CreatePredictionRequest {
   mappingConfigurationId?: string;
 }
 
+export interface PredictionPeriodResponse {
+  days: number;
+  displayName: string;
+  isActive: boolean;
+}
+
+export enum PredictionMethod {
+  XGBoost = "XGBoost",
+  NaiveWeekly = "NaiveWeekly",
+}
+
+export enum MetricScope {
+  Overall = "Overall",
+  Product = "Product",
+}
+
 export interface ForecastResultResponse {
   productName: string;
   forecastDate: string;
@@ -209,6 +225,9 @@ export interface ForecastResultResponse {
 }
 
 export interface PredictionMetricResponse {
+  method?: PredictionMethod;
+  scope?: MetricScope;
+  mbe?: number | null;
   // null = aggregate (overall); non-null = per-product row
   productName: string | null;
   wape: number | null;
@@ -220,6 +239,14 @@ export interface PredictionMetricResponse {
 }
 
 export interface PredictionResponse {
+  warnings?: string[];
+  trainingPeriodStart?: string | null;
+  trainingPeriodEnd?: string | null;
+  evaluationPeriodStart?: string | null;
+  evaluationPeriodEnd?: string | null;
+  productMetrics?: PredictionMetricResponse[];
+  baselineMetrics?: PredictionMetricResponse[];
+  baselineProductMetrics?: PredictionMetricResponse[];
   id: string;
   datasetId: string;
   forecastPeriod: number;
@@ -227,6 +254,7 @@ export interface PredictionResponse {
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
+  isDemo: boolean;
   forecastResults: ForecastResultResponse[];
   metrics: PredictionMetricResponse[];
   createdAt: string;

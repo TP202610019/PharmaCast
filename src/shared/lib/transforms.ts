@@ -6,7 +6,11 @@ import type {
   DashboardChartPoint,
   DashboardHistoricalPoint,
 } from "../types/api";
-import { ExecutionStatus } from "../types/api";
+import { ExecutionStatus, PredictionMethod, MetricScope } from "../types/api";
+
+export function isXGBoostMetric(metric: PredictionMetricResponse): boolean {
+  return metric.method == null || metric.method === PredictionMethod.XGBoost;
+}
 
 // ─── Chart data types ─────────────────────────────────────────────────────────
 
@@ -59,7 +63,7 @@ export function forecastResultsToProducts(
   const historicalMap = new Map<string, number | null>();
   if (metrics) {
     for (const m of metrics) {
-      if (m.productName) {
+      if (m.productName && isXGBoostMetric(m)) {
         historicalMap.set(m.productName, m.historicalAvg ?? null);
       }
     }
@@ -67,20 +71,26 @@ export function forecastResultsToProducts(
 
   let idx = 0;
   const products: UIProduct[] = [];
+  const positiveDemandProducts = [...productMap.entries()]
+    .filter(([, value]) => value.total > 0);
+  const priorityRank = new Map(
+    positiveDemandProducts
+      .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]))
+      .map(([name], rank) => [name, rank / positiveDemandProducts.length])
+  );
 
   for (const [name, agg] of productMap) {
-    const avgPredicted = agg.total / Math.max(agg.count, 1);
     const planItem = planMap.get(name);
 
-    const priority = derivePriority(avgPredicted);
+    const priority = derivePriority(agg.total, priorityRank.get(name) ?? 1, planItem);
 
     products.push({
       id: `product-${idx++}`,
       name,
       category: planItem?.category ?? "General",
       currentStock: planItem?.stockActual ?? 0,
-      predictedDemand: Math.round(planItem?.demandPredicted ?? avgPredicted),
-      recommendedQty: Math.round(planItem?.toPurchase ?? planItem?.recommendedQuantity ?? avgPredicted),
+      predictedDemand: Math.round(planItem?.demandPredicted ?? agg.total),
+      recommendedQty: Math.ceil(planItem?.toPurchase ?? planItem?.recommendedQuantity ?? agg.total),
       hasInventory: planItem?.stockActual != null,
       priority,
       unitCost: planItem?.estimatedCost
@@ -94,10 +104,18 @@ export function forecastResultsToProducts(
   return products;
 }
 
-function derivePriority(avgDailyQty: number): "critical" | "high" | "medium" | "low" {
-  if (avgDailyQty > 1.67) return "critical";
-  if (avgDailyQty > 0.42) return "high";
-  if (avgDailyQty > 0.08) return "medium";
+function derivePriority(totalDemand: number, relativeRank: number, planItem?: PurchasePlanItemResponse): "critical" | "high" | "medium" | "low" {
+  if (totalDemand <= 0) return "low";
+  if (planItem?.stockActual != null && totalDemand > 0) {
+    const shortage = Math.max(0, totalDemand - planItem.stockActual) / totalDemand;
+    if (shortage >= 0.75) return "critical";
+    if (shortage >= 0.4) return "high";
+    if (shortage > 0) return "medium";
+    return "low";
+  }
+  if (relativeRank < 0.15) return "critical";
+  if (relativeRank < 0.4) return "high";
+  if (relativeRank < 0.75) return "medium";
   return "low";
 }
 
@@ -112,16 +130,15 @@ export function buildProductChartData(
     .filter((r) => r.productName === productName)
     .sort((a, b) => a.forecastDate.localeCompare(b.forecastDate));
 
-  if (!filtered.length) return buildGeneratedChartData(100, forecastPeriod);
+  if (!filtered.length) return [];
 
   return filtered.map((r) => {
-    const conf = Math.round(r.predictedQuantity * 0.11);
     return {
       date: new Date(r.forecastDate + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
       historical: null,
-      predicted: Math.round(r.predictedQuantity),
-      upper: r.upperBound !== null ? Math.round(r.upperBound) : Math.round(r.predictedQuantity) + conf,
-      lower: r.lowerBound !== null ? Math.round(r.lowerBound) : Math.max(0, Math.round(r.predictedQuantity) - conf),
+      predicted: r.predictedQuantity,
+      upper: r.upperBound ?? null,
+      lower: r.lowerBound ?? null,
     };
   });
 }
@@ -137,113 +154,49 @@ export function buildGeneratedChartData(baseVal: number, days: number): ChartPoi
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-    const conf = Math.round(baseVal * 0.11);
-    data.push({ date: label, historical: null, predicted: baseVal, upper: baseVal + conf, lower: Math.max(0, baseVal - conf) });
+    data.push({ date: label, historical: null, predicted: baseVal, upper: null, lower: null });
   }
   return data;
 }
 
 export function buildChartFromBackendPoints(
   backendPoints: DashboardChartPoint[],
-  forecastPeriod: number,
+  _forecastPeriod: number,
   historicalPoints?: DashboardHistoricalPoint[]
 ): ChartPoint[] {
-  if (!backendPoints.length) return buildGeneratedChartData(100, forecastPeriod);
+  const history = [...(historicalPoints ?? [])]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((h) => ({
+      date: formatChartDate(h.date),
+      historical: h.quantity,
+      predicted: null,
+      upper: null,
+      lower: null,
+    }));
+  const forecast = [...backendPoints]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((p) => ({
+      date: formatChartDate(p.date),
+      historical: null,
+      predicted: p.predicted,
+      upper: p.upper ?? null,
+      lower: p.lower ?? null,
+    }));
+  return [...history, ...forecast];
+}
 
-  const points: ChartPoint[] = [];
-
-  if (historicalPoints && historicalPoints.length > 0) {
-    // Build historical map: date label → quantity
-    const histMap = new Map<string, number>();
-    for (const h of historicalPoints) {
-      const label = new Date(h.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      histMap.set(label, h.quantity);
-    }
-
-    // Add all historical points
-    for (const h of historicalPoints) {
-      const label = new Date(h.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      points.push({ date: label, historical: h.quantity, predicted: null, upper: null, lower: null });
-    }
-
-    // Prediction-only points (dates not already covered by historical)
-    const predOnly = backendPoints.filter((p) => {
-      const label = new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      return !histMap.has(label);
-    });
-
-    // --- Level alignment: scale predictions to start near historical tail average ---
-    const tailN = Math.min(14, historicalPoints.length);
-    const tailAvg = historicalPoints.slice(-tailN).reduce((s, h) => s + h.quantity, 0) / tailN;
-    const headN = Math.min(7, predOnly.length);
-    const predHeadAvg = headN > 0 ? predOnly.slice(0, headN).reduce((s, p) => s + p.predicted, 0) / headN : 0;
-    const alignScale = tailAvg > 0 && predHeadAvg > 0
-      ? Math.max(0.3, Math.min(3.5, tailAvg / predHeadAvg))
-      : 1.0;
-
-    // --- Day-of-week pattern from historical ---
-    // Pharmacy demand has strong weekly seasonality. Extract the per-DOW multiplier
-    // from the last 8 weeks of historical data and apply it to predictions so the
-    // predicted line has realistic peaks and valleys instead of a flat average.
-    const overallAvg = historicalPoints.reduce((s, h) => s + h.quantity, 0) / historicalPoints.length;
-    const dowTotals = [0, 0, 0, 0, 0, 0, 0];
-    const dowCounts = [0, 0, 0, 0, 0, 0, 0];
-    const recentHist = historicalPoints.slice(-Math.min(56, historicalPoints.length));
-    for (const h of recentHist) {
-      const dow = new Date(h.date + "T00:00:00").getDay();
-      dowTotals[dow] += h.quantity;
-      dowCounts[dow]++;
-    }
-    // Normalized multiplier per day: 1.0 = average, >1 = above average day
-    const dowMult = dowTotals.map((t, d) =>
-      dowCounts[d] > 0 && overallAvg > 0 ? (t / dowCounts[d]) / overallAvg : 1.0
-    );
-
-    const lastHistQty = historicalPoints[historicalPoints.length - 1]?.quantity ?? null;
-    const total = Math.max(predOnly.length, 1);
-    predOnly.forEach((p, i) => {
-      const label = new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      const dow = new Date(p.date + "T00:00:00").getDay();
-      // Level alignment tapers out over the full horizon
-      const taper = Math.max(0, 1 - i / total);
-      const aligned = p.predicted * (1 + (alignScale - 1) * taper);
-      // Day-of-week pattern: 50% influence so variation is visible but not overwhelming
-      const withPattern = aligned * (1 + (dowMult[dow] - 1) * 0.5);
-      // Subtle growth trend: +6% over the full horizon
-      const trend = 1 + (i / total) * 0.06;
-      const scaled = Math.max(0, withPattern * trend);
-      const conf = Math.round(scaled * 0.11);
-      points.push({
-        date: label,
-        historical: i === 0 && lastHistQty != null ? lastHistQty : null,
-        predicted: scaled,
-        upper: p.upper ?? Math.round(scaled) + conf,
-        lower: p.lower ?? Math.max(0, Math.round(scaled) - conf),
-      });
-    });
-  } else {
-    // No historical data — just show predictions
-    for (const p of backendPoints) {
-      const conf = Math.round(p.predicted * 0.11);
-      points.push({
-        date: new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
-        historical: null,
-        predicted: p.predicted,
-        upper: p.upper ?? Math.round(p.predicted) + conf,
-        lower: p.lower ?? Math.max(0, Math.round(p.predicted) - conf),
-      });
-    }
-  }
-
-  return points;
+export function formatChartDate(isoDate: string): string {
+  return new Date(`${isoDate.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", {
+    day: "numeric", month: "short", year: "2-digit",
+  });
 }
 
 // ─── Extract overall accuracy from metrics ────────────────────────────────────
 
 export function extractAccuracy(metrics: PredictionMetricResponse[]): number {
-  const overall = metrics.find((m) => !m.productName);
-  if (!overall?.wape) return 0;
-  return 82.6; // fixed demo value for the "Precisión Estimada" panel
+  const overall = metrics.find((m) => isXGBoostMetric(m) && (m.scope === MetricScope.Overall || !m.productName));
+  if (overall?.wape == null) return 0;
+  return Math.round(Math.max(0, Math.min(100, 100 - overall.wape)) * 10) / 10;
 }
 
 // ─── Format execution status for display ─────────────────────────────────────

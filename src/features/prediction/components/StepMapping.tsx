@@ -1,10 +1,13 @@
 import { ChevronDown, Calendar, Clock, ShoppingCart, Package, CheckCircle, BookOpen, Loader2, X, Star, AlertCircle } from "lucide-react";
-import type { MappingFieldResponse, MappingConfigResponse } from "@/shared/types/api";
+import type { MappingFieldResponse, MappingConfigResponse, PredictionPeriodResponse } from "@/shared/types/api";
 import type { UploadedFile } from "../types";
 
 interface Props {
   files: UploadedFile[];
   forecastDays: number;
+  periods: PredictionPeriodResponse[];
+  periodsLoading: boolean;
+  catalogError: string;
   setForecastDays: (d: number) => void;
   mappingTab: "sales" | "inventory";
   setMappingTab: (t: "sales" | "inventory") => void;
@@ -31,7 +34,7 @@ interface Props {
 }
 
 export function StepMapping({
-  files, forecastDays, setForecastDays,
+  files, forecastDays, setForecastDays, periods, periodsLoading, catalogError,
   mappingTab, setMappingTab,
   salesMapping, setSalesMapping,
   inventoryMapping, setInventoryMapping,
@@ -66,6 +69,7 @@ export function StepMapping({
 
   return (
     <div className="space-y-5">
+      {catalogError && <p role="alert" className="text-red-600 text-sm">{catalogError}</p>}
       {/* Config card */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-gray-900 mb-4" style={{ fontWeight: 600 }}>Configuración del análisis</h2>
@@ -83,18 +87,15 @@ export function StepMapping({
               <span className="text-gray-500" style={{ fontSize: "0.8125rem" }}>Período de predicción</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { days: 7,  label: "7 días",  hint: "Recomendado" },
-                { days: 14, label: "14 días", hint: "Moderado" },
-                { days: 30, label: "30 días", hint: "Largo plazo" },
-              ].map(({ days, label, hint }) => (
+              {periods.map(({ days, displayName }) => (
                 <button key={days} onClick={() => setForecastDays(days)}
                   className={`rounded-lg border py-2 px-1 transition-all flex flex-col items-center ${forecastDays === days ? "border-cyan-500 bg-cyan-500/10 text-cyan-500" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}>
-                  <span style={{ fontSize: "0.875rem", fontWeight: forecastDays === days ? 600 : 400 }}>{label}</span>
-                  <span style={{ fontSize: "0.6875rem", opacity: 0.7 }}>{hint}</span>
+                  <span style={{ fontSize: "0.875rem", fontWeight: forecastDays === days ? 600 : 400 }}>{displayName}</span>
                 </button>
               ))}
             </div>
+            {periodsLoading && <p className="text-sm text-gray-500">Cargando períodos…</p>}
+            {!periodsLoading && periods.length === 0 && <p role="alert" className="text-sm text-red-600">No hay períodos activos disponibles.</p>}
           </div>
         </div>
       </div>
@@ -120,16 +121,16 @@ export function StepMapping({
               <select
                 className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all cursor-pointer"
                 style={{ fontSize: "0.8125rem", minWidth: 240 }}
-                value={appliedMappingId ?? ""}
+                value={mappingTab === "sales" ? appliedMappingId ?? "" : savedMappings.find((m) => m.fields.length > 0 && m.fields.every((f) => inventoryMapping[f.fieldKey] === f.datasetColumnName))?.id ?? ""}
                 onChange={(e) => {
                   const id = e.target.value;
-                  setAppliedMappingId(id || null);
+                  if (mappingTab === "sales") setAppliedMappingId(id || null);
                   if (id) {
                     const cfg = savedMappings.find((m) => m.id === id);
                     if (cfg) {
                       const newMapping: Record<string, string> = {};
                       cfg.fields.forEach((f) => { newMapping[f.fieldKey] = f.datasetColumnName; });
-                      setSalesMapping(newMapping);
+                      setActiveMapping(newMapping);
                     }
                   }
                 }}
@@ -141,7 +142,7 @@ export function StepMapping({
               </select>
               {appliedMappingId && (
                 <button
-                  onClick={() => { setAppliedMappingId(null); setSalesMapping({}); }}
+                  onClick={() => { if (mappingTab === "sales") setAppliedMappingId(null); setActiveMapping({}); }}
                   className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 hover:text-red-500 hover:border-red-200 transition-all"
                   style={{ fontSize: "0.75rem" }}
                 >
@@ -261,7 +262,7 @@ export function StepMapping({
                           </p>
                         </div>
                         <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                          <select value={val} onChange={(e) => setActiveMapping((m) => ({ ...m, [v.key]: e.target.value }))}
+                          <select value={val} onChange={(e) => { if (mappingTab === "sales") setAppliedMappingId(null); setActiveMapping((m) => ({ ...m, [v.key]: e.target.value })); }}
                             className={`w-full appearance-none rounded-lg border px-3 pr-8 py-2 text-gray-900 outline-none focus:ring-2 transition-all cursor-pointer ${isMapped ? "border-cyan-500/40 bg-white focus:border-cyan-500 focus:ring-cyan-500/10" : "border-gray-300 bg-white hover:border-gray-400 focus:border-cyan-500 focus:ring-cyan-500/10"}`}
                             style={{ fontSize: "0.8125rem" }}>
                             <option value="">Seleccionar columna…</option>
@@ -297,7 +298,7 @@ export function StepMapping({
                           <p className="text-gray-600" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{v.label}</p>
                         </div>
                         <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                          <select value={val} onChange={(e) => setActiveMapping((m) => ({ ...m, [v.key]: e.target.value }))}
+                          <select value={val} onChange={(e) => { if (mappingTab === "sales") setAppliedMappingId(null); setActiveMapping((m) => ({ ...m, [v.key]: e.target.value })); }}
                             className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 pr-8 py-2 text-gray-700 outline-none hover:border-gray-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all cursor-pointer"
                             style={{ fontSize: "0.8125rem" }}>
                             <option value="">No asignar</option>

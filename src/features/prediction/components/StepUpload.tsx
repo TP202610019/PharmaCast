@@ -8,7 +8,7 @@ interface Props {
   setIsDragOver: (v: boolean) => void;
   uploadError: string;
   uploadFile: (file: File, type: "sales" | "inventory") => void;
-  removeFile: (name: string) => void;
+  removeFile: (type: "sales" | "inventory") => void;
   handleFileInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   salesInputRef: React.RefObject<HTMLInputElement | null>;
@@ -68,7 +68,7 @@ export function StepUpload({
                   {salesFile ? "Cambiar" : "+ Seleccionar"}
                 </button>
                 {salesFile && (
-                  <button onClick={() => removeFile(salesFile.name)}
+                  <button onClick={() => removeFile("sales")}
                     className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-400 hover:bg-red-100 transition-all"
                     style={{ fontSize: "0.75rem" }}>
                     Quitar
@@ -113,7 +113,7 @@ export function StepUpload({
                   {invFile ? "Cambiar" : "+ Seleccionar"}
                 </button>
                 {invFile && (
-                  <button onClick={() => removeFile(invFile.name)}
+                  <button onClick={() => removeFile("inventory")}
                     className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-400 hover:bg-red-100 transition-all"
                     style={{ fontSize: "0.75rem" }}>
                     Quitar
