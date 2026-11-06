@@ -12,12 +12,12 @@ export function LoginRequiredModal({ open, onClose }: Props) {
 
   const handleLogin = () => {
     onClose();
-    navigate("/login");
+    navigate("/acceso");
   };
 
   const handleRegister = () => {
     onClose();
-    navigate("/register");
+    navigate("/registro");
   };
 
   return (
@@ -31,20 +31,20 @@ export function LoginRequiredModal({ open, onClose }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/25 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/25 "
             onClick={onClose}
           />
 
           {/* Modal */}
           <motion.div
             key="modal"
-            initial={{ opacity: 0, scale: 0.93, y: 16 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.93, y: 16 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-8 max-w-sm w-full pointer-events-auto text-center relative">
+            <div role="dialog" aria-modal="true" className="pc-dialog bg-white rounded-2xl shadow-2xl border border-gray-200 p-8 max-w-sm w-full pointer-events-auto text-center relative">
               {/* Close button */}
               <button
                 onClick={onClose}

@@ -81,6 +81,7 @@ export interface RecentExecutionSummary {
 }
 
 export interface DashboardMetricsResponse {
+  averageAccuracy: number | null;
   totalDatasets: number;
   totalPredictions: number;
   completedPredictions: number;

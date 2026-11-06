@@ -1,3 +1,4 @@
+import { AuthShell } from "../components/AuthShell";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router";
 import { Lock, Eye, EyeOff, Activity, Mail, ArrowLeft, CheckCircle, AlertCircle, Send, RefreshCw, ShieldCheck } from "lucide-react";
@@ -111,78 +112,13 @@ export function ForgotPassword() {
     }, 1200);
   };
 
-  const leftPanel = (
-    <div className="hidden lg:flex lg:w-5/12 flex-col relative overflow-hidden bg-cyan-500">
-      <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-white/5" />
-      <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-white/[0.06]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-white/[0.03]" />
-      <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(white 1px, transparent 1px), linear-gradient(to right, white 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
-      <div className="relative z-10 flex flex-col h-full p-12">
-        <Link to="/" className="flex items-center gap-2.5 group w-fit">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 border border-white/25 group-hover:bg-white/25 transition-colors">
-            <Activity className="h-5 w-5 text-white" />
-          </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-white tracking-tight" style={{ fontSize: "0.9375rem", fontWeight: 700 }}>PharmaCast</span>
-            <span className="text-white/50" style={{ fontSize: "0.6rem", fontWeight: 400, letterSpacing: "0.1em" }}>PREDICTION SYSTEM</span>
-          </div>
-        </Link>
-        <div className="flex-1 flex flex-col justify-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
-            <h2 className="text-white mb-3" style={{ fontSize: "1.875rem", fontWeight: 700, lineHeight: 1.2 }}>Recupera tu acceso</h2>
-            <p className="text-white/65 mb-8" style={{ fontSize: "0.9375rem", lineHeight: 1.7 }}>
-              Te enviaremos un código de 6 dígitos para verificar tu identidad y restablecer tu contraseña.
-            </p>
-            <div className="space-y-4">
-              {[
-                { step: "1", label: "Ingresa tu correo registrado", active: step === "email" },
-                { step: "2", label: "Introduce el código de 6 dígitos", active: step === "verify" },
-                { step: "3", label: "Crea una nueva contraseña", active: step === "reset" || step === "success" },
-              ].map((item) => (
-                <div key={item.step} className="flex items-center gap-3">
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-all ${item.active ? "bg-white/25 border-white/40" : "bg-white/10 border-white/20"}`}>
-                    <span className="text-white" style={{ fontSize: "0.75rem", fontWeight: 700 }}>{item.step}</span>
-                  </div>
-                  <span className={`transition-all ${item.active ? "text-white" : "text-white/60"}`} style={{ fontSize: "0.875rem", fontWeight: item.active ? 600 : 400 }}>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-        <p className="text-white/35" style={{ fontSize: "0.75rem" }}>© 2026 PharmaCast · Todos los derechos reservados</p>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen flex">
-      {leftPanel}
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 bg-white overflow-y-auto">
-        {/* Mobile logo */}
-        <div className="lg:hidden mb-8">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-              <Activity className="h-4 w-4 text-cyan-500" />
-            </div>
-            <span className="text-gray-900 tracking-tight" style={{ fontSize: "0.9375rem", fontWeight: 700 }}>PharmaCast</span>
-          </Link>
-        </div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-md">
-          <Link to="/login" className="inline-flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors mb-8" style={{ fontSize: "0.875rem" }}>
-            <ArrowLeft className="h-4 w-4" />
-            Volver al inicio de sesión
-          </Link>
-
-          <AnimatePresence mode="wait">
+  return <AuthShell mode="recovery"><div className="auth-form auth-recovery-form">          <AnimatePresence mode="wait">
 
             {/* ── STEP 1: EMAIL ── */}
             {step === "email" && (
               <motion.div key="email" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.25 }}>
                 <div className="mb-8">
-                  <p className="text-cyan-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 1 DE 3</p>
+                  <p className="text-blue-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 1 DE 3</p>
                   <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.75rem", fontWeight: 700 }}>¿Olvidaste tu contraseña?</h1>
                   <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Ingresa tu correo y te enviaremos un código de 6 dígitos</p>
                 </div>
@@ -199,12 +135,12 @@ export function ForgotPassword() {
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@farmacia.com"
-                        className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all"
+                        className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                         style={{ fontSize: "0.9375rem" }} />
                     </div>
                   </div>
                   <button type="submit" disabled={loading}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-6 py-3 text-white transition-all hover:bg-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                     {loading ? (
                       <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Enviando código...</>
@@ -216,7 +152,7 @@ export function ForgotPassword() {
 
                 <p className="text-center text-gray-500 mt-8" style={{ fontSize: "0.9375rem" }}>
                   ¿Recordaste tu contraseña?{" "}
-                  <Link to="/login" className="text-cyan-500 hover:text-cyan-600 transition-colors" style={{ fontWeight: 600 }}>Inicia sesión</Link>
+                  <Link to="/acceso" className="text-blue-500 hover:text-blue-600 transition-colors" style={{ fontWeight: 600 }}>Inicia sesión</Link>
                 </p>
               </motion.div>
             )}
@@ -225,17 +161,17 @@ export function ForgotPassword() {
             {step === "verify" && (
               <motion.div key="verify" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.25 }}>
                 <div className="mb-8">
-                  <p className="text-cyan-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 2 DE 3</p>
+                  <p className="text-blue-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 2 DE 3</p>
                   <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.75rem", fontWeight: 700 }}>Verifica tu identidad</h1>
 
                   {/* Info banner */}
-                  <div className="flex items-start gap-3 mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3.5">
-                    <ShieldCheck className="h-5 w-5 text-cyan-500 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-3 mt-4 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3.5">
+                    <ShieldCheck className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-gray-700" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
                         Se envió un código de 6 dígitos a:
                       </p>
-                      <p className="text-cyan-600 mt-0.5" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{email}</p>
+                      <p className="text-blue-600 mt-0.5" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{email}</p>
                       <p className="text-gray-400 mt-1" style={{ fontSize: "0.75rem" }}>Revisa tu bandeja de entrada y la carpeta de spam</p>
                     </div>
                   </div>
@@ -260,10 +196,10 @@ export function ForgotPassword() {
                           onKeyDown={(e) => handleCodeKeyDown(i, e)}
                           className={`h-14 w-12 rounded-xl border-2 text-center outline-none transition-all text-gray-900 ${
                             digit
-                              ? "border-cyan-500 bg-cyan-500/5 shadow-sm shadow-cyan-500/10"
+                              ? "border-blue-500 bg-blue-500/5 shadow-sm shadow-blue-500/10"
                               : codeError
                               ? "border-red-300 bg-red-50"
-                              : "border-gray-300 bg-white hover:border-gray-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10"
+                              : "border-gray-300 bg-white hover:border-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                           }`}
                           style={{ fontSize: "1.375rem", fontWeight: 700 }}
                         />
@@ -278,7 +214,7 @@ export function ForgotPassword() {
 
                   {/* Verify button */}
                   <button onClick={handleVerify} disabled={verifying || code.join("").length < 6}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-6 py-3 text-white transition-all hover:bg-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                     {verifying ? (
                       <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Verificando...</>
@@ -297,7 +233,7 @@ export function ForgotPassword() {
                       </div>
                     ) : (
                       <button onClick={handleResend}
-                        className="flex items-center gap-1.5 text-cyan-500 hover:text-cyan-600 transition-colors"
+                        className="flex items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors"
                         style={{ fontSize: "0.875rem", fontWeight: 600 }}>
                         <RefreshCw className="h-3.5 w-3.5" />
                         Reenviar código
@@ -320,7 +256,7 @@ export function ForgotPassword() {
             {step === "reset" && (
               <motion.div key="reset" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.25 }}>
                 <div className="mb-8">
-                  <p className="text-cyan-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 3 DE 3</p>
+                  <p className="text-blue-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 3 DE 3</p>
                   <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.75rem", fontWeight: 700 }}>Crea una nueva contraseña</h1>
                   <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Asegúrate de que tenga al menos 8 caracteres.</p>
                 </div>
@@ -340,7 +276,7 @@ export function ForgotPassword() {
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input type={showNewPass ? "text" : "password"} value={newPass}
                           onChange={(e) => setNewPass(e.target.value)} placeholder="Mín. 8 caracteres" autoFocus
-                          className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all"
+                          className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                           style={{ fontSize: "0.9375rem" }} />
                         <button type="button" onClick={() => setShowNewPass(!showNewPass)}
                           className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -357,7 +293,7 @@ export function ForgotPassword() {
                           className={`w-full rounded-xl border bg-white pl-10 pr-10 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 transition-all ${
                             confirmPass && confirmPass === newPass
                               ? "border-green-400 focus:border-green-500 focus:ring-green-500/20"
-                              : "border-gray-300 focus:border-cyan-500 focus:ring-cyan-500/10"
+                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/10"
                           }`}
                           style={{ fontSize: "0.9375rem" }} />
                         <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)}
@@ -374,7 +310,7 @@ export function ForgotPassword() {
                   </div>
 
                   <button type="submit" disabled={saving || !newPass || !confirmPass}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-6 py-3 text-white transition-all hover:bg-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed mt-4"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed mt-4"
                     style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                     {saving ? (
                       <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Guardando...</>
@@ -388,7 +324,7 @@ export function ForgotPassword() {
 
             {/* ── SUCCESS POPUP / VIEW ── */}
             {step === "success" && (
-              <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }} className="text-center relative z-10 bg-white rounded-3xl p-8 border border-gray-100 shadow-xl shadow-cyan-500/5">
+              <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }} className="text-center relative z-10 bg-white rounded-3xl p-8 border border-gray-100 shadow-xl shadow-blue-500/5">
                 <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-green-500/10 border border-green-500/20 mx-auto mb-6">
                   <CheckCircle className="h-10 w-10 text-green-500" />
                 </div>
@@ -396,17 +332,13 @@ export function ForgotPassword() {
                 <p className="text-gray-500 mb-8" style={{ fontSize: "0.9375rem", lineHeight: 1.6 }}>
                   Tu contraseña se ha actualizado correctamente. Ya puedes acceder a tu cuenta de PharmaCast con tus nuevas credenciales.
                 </p>
-                <Link to="/login"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-6 py-3 text-white transition-all hover:bg-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20"
+                <Link to="/acceso"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20"
                   style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                   <ArrowLeft className="h-4 w-4" />
                   Iniciar sesión
                 </Link>
               </motion.div>
             )}
-          </AnimatePresence>
-        </motion.div>
-      </div>
-    </div>
-  );
+          </AnimatePresence></div></AuthShell>;
 }

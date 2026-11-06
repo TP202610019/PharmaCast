@@ -120,25 +120,22 @@ export function SettingsModal({ open, onClose }: Props) {
           <>
             {/* Backdrop */}
             <motion.div key="settings-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-50 bg-black/25 backdrop-blur-sm" onClick={handleClose} />
+              className="fixed inset-0 z-50 settings-backdrop bg-black/25" onClick={handleClose} />
 
             {/* Modal */}
-            <motion.div key="settings-modal" initial={{ opacity: 0, scale: 0.93, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.93, y: 16 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
+            <motion.div key="settings-modal" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.16, ease: "easeOut" }}
               className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
 
-              <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl pointer-events-auto flex flex-col relative"
+              <div role="dialog" aria-modal="true" aria-label="Configuración de cuenta" className="settings-dialog bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl pointer-events-auto flex flex-col relative"
                 style={{ maxHeight: "80vh" }}>
 
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-                      <Settings2 className="h-4.5 w-4.5 text-cyan-500" style={{ height: 18, width: 18 }} />
-                    </div>
                     <div>
-                      <h2 className="text-gray-900" style={{ fontSize: "1rem", fontWeight: 700 }}>Configuración de cuenta</h2>
-                      <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>Gestiona tu perfil y variables de predicción</p>
+                      <h2 className="text-gray-900" style={{ fontSize: "1rem", fontWeight: 700 }}>Configuración</h2>
+                      
                     </div>
                   </div>
                   <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
@@ -148,7 +145,7 @@ export function SettingsModal({ open, onClose }: Props) {
 
                 {/* ── Main tabs ── */}
                 <div className="px-6 pt-4 pb-0 border-b border-gray-100 shrink-0">
-                  <div className="flex gap-1">
+                  <div className="settings-tabs flex gap-1">
                     {[
                       { id: "account", label: "Cuenta", icon: User },
                       { id: "variables", label: "Variables de predicción", icon: Settings2 },
@@ -157,8 +154,8 @@ export function SettingsModal({ open, onClose }: Props) {
                       const active = mainTab === tab.id;
                       return (
                         <button key={tab.id} onClick={() => { setMainTab(tab.id as any); setEditField(null); }}
-                          className={`flex items-center gap-2 px-4 py-2.5 border-b-2 transition-all ${active ? "border-cyan-500 text-cyan-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                          style={{ fontSize: "0.875rem", fontWeight: active ? 600 : 400 }}>
+                          className={`flex items-center gap-2 px-4 py-2.5 border-b-2 transition-all ${active ? "is-active border-cyan-500 text-cyan-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                          style={{ fontSize: "0.875rem", fontWeight: 500 }}>
                           <Icon className="h-4 w-4" />{tab.label}
                         </button>
                       );
@@ -167,13 +164,13 @@ export function SettingsModal({ open, onClose }: Props) {
                 </div>
 
                 {/* ── Content ── */}
-                <div className="flex-1 overflow-y-auto">
+                <div className="settings-body flex-1 overflow-y-auto">
 
                   {/* ────────── CUENTA TAB ────────── */}
                   {mainTab === "account" && (
-                    <div className="p-6 space-y-4 relative">
+                    <div className="settings-account p-6 space-y-4 relative">
                       {/* User avatar row */}
-                      <div className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4">
+                      <div className="settings-profile flex items-center gap-4 px-1 py-3">
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500 shrink-0">
                           <span className="text-white" style={{ fontSize: "1.375rem", fontWeight: 700 }}>{(user?.name ?? "U")[0].toUpperCase()}</span>
                         </div>
@@ -205,7 +202,7 @@ export function SettingsModal({ open, onClose }: Props) {
                       ].map((row) => {
                         const Icon = row.icon;
                         return (
-                          <div key={row.label} className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white px-5 py-3.5 hover:border-gray-300 transition-all">
+                          <div key={row.label} className="settings-account-row flex items-center gap-4 py-4">
                             <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${row.bg}`}>
                               <Icon className={`h-4 w-4 ${row.color}`} />
                             </div>
@@ -238,13 +235,13 @@ export function SettingsModal({ open, onClose }: Props) {
                         <div>
                           <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Identificación de variables</h3>
                           <p className="text-gray-400" style={{ fontSize: "0.8125rem", lineHeight: 1.6 }}>
-                            Define el nombre de columna de tu dataset para cada variable del sistema. Serán usadas como valores predeterminados en futuras predicciones.
+                            Relaciona tus columnas con las variables del sistema.
                           </p>
                         </div>
                       </div>
 
                       {/* Sub-tabs */}
-                      <div className="flex gap-1 rounded-xl border border-gray-200 bg-gray-100 p-1 mb-5 w-fit">
+                      <div className="settings-variable-tabs flex gap-1 p-1 mb-5 w-fit">
                         {[
                           { id: "sales", label: "Registro de ventas", icon: ShoppingCart },
                           { id: "inventory", label: "Inventario", icon: Package },
@@ -254,7 +251,7 @@ export function SettingsModal({ open, onClose }: Props) {
                           return (
                             <button key={tab.id} onClick={() => setVarTab(tab.id as any)}
                               className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${active ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                              style={{ fontSize: "0.8125rem", fontWeight: active ? 600 : 400 }}>
+                              style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                               <Icon className="h-3.5 w-3.5" />{tab.label}
                             </button>
                           );
@@ -271,7 +268,7 @@ export function SettingsModal({ open, onClose }: Props) {
                           </div>
                           <div className="space-y-2">
                             {varDefs.required.map((v) => (
-                              <div key={v.key} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 hover:border-gray-300 transition-all">
+                              <div key={v.key} className="settings-variable-row grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-3">
                                 <div>
                                   <p className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                                     {v.label} <span className="text-red-400">*</span>
@@ -293,15 +290,16 @@ export function SettingsModal({ open, onClose }: Props) {
                         </div>
 
                         {/* Optional */}
-                        <div>
+                        <div className="settings-optional-static" key={varTab}>
                           <div className="flex items-center gap-2 mb-3">
-                            <span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                             <p className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Variables opcionales</p>
                             <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-cyan-600" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>Mejoran la precisión</span>
+                            
                           </div>
                           <div className="space-y-2">
                             {varDefs.optional.map((v) => (
-                              <div key={v.key} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 hover:border-gray-200 hover:bg-white transition-all">
+                              <div key={v.key} className="settings-variable-row grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-3">
                                 <div>
                                   <p className="text-gray-600" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{v.label}</p>
                                   <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
@@ -325,7 +323,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 </div>
 
                 {/* ── Footer ── */}
-                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 shrink-0">
+                <div className="settings-footer px-6 border-t border-gray-100 flex items-center justify-between gap-3 shrink-0">
                   <button onClick={handleClose} className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-gray-600 transition-all hover:border-gray-400 hover:text-gray-900" style={{ fontSize: "0.875rem" }}>
                     Cerrar
                   </button>
@@ -347,10 +345,10 @@ export function SettingsModal({ open, onClose }: Props) {
       <AnimatePresence>
         {open && editField !== null && (
           <motion.div key="edit-popup-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={closeEdit}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeEdit}>
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 w-full max-w-sm mx-4 relative overflow-hidden"
+              role="dialog" aria-modal="true" className="pc-dialog bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 w-full max-w-sm mx-4 relative overflow-hidden"
               onClick={(e) => e.stopPropagation()}>
 
               {/* Name / Pharmacy popup */}
@@ -391,12 +389,12 @@ export function SettingsModal({ open, onClose }: Props) {
               {editField === "password" && (
                 <>
                   <div className="flex items-center gap-2 mb-5">
-                    <Lock className="h-4 w-4 text-orange-500" />
+                    <Lock className="h-4 w-4 text-blue-500" />
                     <h3 className="text-gray-900" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>Cambiar contraseña</h3>
                   </div>
 
                   {/* Current password — muted style */}
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 mb-2">
+                  <div className="mb-4">
                     <label className="text-gray-500 block mb-1.5" style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                       Contraseña actual
                     </label>
@@ -414,23 +412,16 @@ export function SettingsModal({ open, onClose }: Props) {
                     </div>
                   </div>
 
-                  {/* Divider */}
-                  <div className="flex items-center gap-2 my-3">
-                    <div className="flex-1 h-px bg-gray-200" />
-                    <span className="text-gray-400 shrink-0" style={{ fontSize: "0.6875rem" }}>Nueva contraseña</span>
-                    <div className="flex-1 h-px bg-gray-200" />
-                  </div>
-
                   {/* New password — highlighted style */}
-                  <div className="rounded-xl border border-cyan-200 bg-cyan-500/3 p-3.5 space-y-3 mb-2" style={{ backgroundColor: "rgb(236 254 255 / 0.4)" }}>
+                  <div className="space-y-4 mb-4">
                     <div>
-                      <label className="text-cyan-700 block mb-1.5" style={{ fontSize: "0.75rem", fontWeight: 500 }}>Nueva contraseña</label>
+                      <label className="text-gray-700 block mb-1.5" style={{ fontSize: "0.75rem", fontWeight: 500 }}>Nueva contraseña</label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-400" />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                         <input type={showNew ? "text" : "password"} value={passVals.newPass}
                           onChange={(e) => setPassVals((p) => ({ ...p, newPass: e.target.value }))}
                           placeholder="Mín. 8 caracteres"
-                          className="w-full rounded-lg border border-cyan-200 bg-white pl-9 pr-10 py-2 text-gray-900 placeholder:text-gray-300 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                          className="w-full rounded-lg border border-gray-200 bg-white pl-9 pr-10 py-2 text-gray-900 placeholder:text-gray-300 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/10 transition-all"
                           style={{ fontSize: "0.875rem" }} />
                         <button type="button" onClick={() => setShowNew(!showNew)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -439,16 +430,16 @@ export function SettingsModal({ open, onClose }: Props) {
                       </div>
                     </div>
                     <div>
-                      <label className="text-cyan-700 block mb-1.5" style={{ fontSize: "0.75rem", fontWeight: 500 }}>Confirmar nueva contraseña</label>
+                      <label className="text-gray-700 block mb-1.5" style={{ fontSize: "0.75rem", fontWeight: 500 }}>Confirmar nueva contraseña</label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-400" />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                         <input type={showConfirm ? "text" : "password"} value={passVals.confirm}
                           onChange={(e) => setPassVals((p) => ({ ...p, confirm: e.target.value }))}
                           placeholder="Repite la nueva contraseña"
                           className={`w-full rounded-lg border bg-white pl-9 pr-10 py-2 text-gray-900 placeholder:text-gray-300 outline-none focus:ring-1 transition-all ${
                             passVals.confirm && passVals.confirm === passVals.newPass
                               ? "border-green-400 focus:border-green-500 focus:ring-green-500/20"
-                              : "border-cyan-200 focus:border-cyan-500 focus:ring-cyan-500/20"
+                              : "border-gray-200 focus:border-blue-500 focus:ring-blue-500/10"
                           }`}
                           style={{ fontSize: "0.875rem" }} />
                         <button type="button" onClick={() => setShowConfirm(!showConfirm)}
@@ -475,7 +466,7 @@ export function SettingsModal({ open, onClose }: Props) {
                       Cancelar
                     </button>
                     <button onClick={saveEdit}
-                      className={`flex-1 flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-white transition-all ${saved ? "bg-green-500" : "bg-cyan-500 hover:bg-cyan-400"}`}
+                      className={`flex-1 flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-white transition-all ${saved ? "bg-green-500" : "bg-blue-500 hover:bg-blue-600"}`}
                       style={{ fontSize: "0.875rem", fontWeight: 600 }}>
                       {saved ? <><CheckCircle2 className="h-4 w-4" />Guardado</> : <><Save className="h-3.5 w-3.5" />Actualizar</>}
                     </button>

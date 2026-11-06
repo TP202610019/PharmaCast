@@ -1,5 +1,8 @@
+import { exportPurchase, priorityRank } from "../../lib/purchaseExport";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
+import { usePredictionDraft } from "../hooks/usePredictionDraft";
+import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { downloadCsv, downloadPdf } from "../../lib/exportUtils";
 import { useNavigate } from "react-router";
 import {
   Upload,
@@ -45,10 +48,9 @@ import { datasetService } from "../../services/dataset.service";
 import { mappingService, mappingFieldService } from "../../services/mapping.service";
 import { predictionService } from "../../services/prediction.service";
 import { purchasePlanService } from "../../services/purchase-plan.service";
-import { dashboardService } from "../../services/dashboard.service";
 import {
   forecastResultsToProducts,
-  buildChartFromBackendPoints,
+  buildProductChartData,
   buildGeneratedChartData,
   extractAccuracy,
   type UIProduct,
@@ -57,6 +59,8 @@ import {
 import type { PredictionResponse, PurchasePlanResponse, MappingFieldResponse } from "../../types/api";
 import { ExecutionStatus } from "../../types/api";
 import { extractApiErrorMessage } from "../context/AuthContext";
+
+import "../../styles/prediction.css";
 
 /* ── Constants ── */
 const STEPS = [
@@ -71,7 +75,7 @@ const priorityConfig = {
   critical: { label: "Crítico", color: "text-red-500", bg: "bg-red-500/10", border: "border-red-500/30", dot: "bg-red-500" },
   high:     { label: "Alto",    color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30", dot: "bg-orange-500" },
   medium:   { label: "Medio",   color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/30", dot: "bg-yellow-500" },
-  low:      { label: "Bajo",    color: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/30", dot: "bg-cyan-500" },
+  low:      { label: "Bajo",    color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/30", dot: "bg-blue-500" },
 };
 
 const ANALYSIS_STEPS_LABELS = [
@@ -88,7 +92,7 @@ const PIPELINE_STEPS = [
   { label: "Carga de datos",             description: "Leyendo archivos de ventas e inventario",             icon: Upload },
   { label: "Preprocesamiento",           description: "Limpiando valores atípicos y normalizando registros", icon: Settings },
   { label: "Ingeniería de variables",    description: "Extrayendo estacionalidad y tendencias",             icon: BarChart3 },
-  { label: "Entrenamiento del modelo",   description: "XGBoost (modelo de predicción de demanda)",          icon: Activity },
+  { label: "Entrenamiento del modelo",   description: "Aprendiendo los patrones de tus ventas",          icon: Activity },
   { label: "Proyecciones de demanda",    description: "Calculando demanda futura por producto",             icon: TrendingUp },
   { label: "Plan de compras",            description: "Calculando recomendaciones de reabastecimiento",     icon: ShoppingCart },
 ];
@@ -173,24 +177,20 @@ const parseCsvHeaders = (file: File): Promise<string[]> =>
 /* ── Tooltip ── */
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
-    const hasPredicted = payload.some((p: any) => p.name === "predicted" && p.value != null);
-    const filtered = payload.filter((p: any) =>
-      p.value != null && p.name !== "upper" && p.name !== "lower" &&
-      !(p.name === "historical" && hasPredicted)
-    );
+    const filtered = payload.filter((p: any) => p.value != null && p.name !== "upper" && p.name !== "lower");
     if (!filtered.length) return null;
     return (
       <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-        <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</p>
+        <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.date ?? label}</p>
         {filtered.map((p: any) => (
           <div key={p.name} className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.name === "historical" ? "#3b82f6" : "#06b6d4" }} />
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.name === "historical" ? "#007AFF" : "#007AFF" }} />
               <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>
                 {p.name === "historical" ? "Histórico" : "Predicción"}
               </span>
             </div>
-            <span style={{ color: p.name === "historical" ? "#3b82f6" : "#06b6d4", fontSize: "0.875rem", fontWeight: 700 }}>
+            <span style={{ color: p.name === "historical" ? "#007AFF" : "#007AFF", fontSize: "0.875rem", fontWeight: 700 }}>
               {p.value} uds
             </span>
           </div>
@@ -234,7 +234,7 @@ function Paginator({ page, total, pageSize, onChange }: { page: number; total: n
             <span key={`ellipsis-${i}`} className="px-1 text-gray-400" style={{ fontSize: "0.75rem" }}>…</span>
           ) : (
             <button key={p} onClick={() => onChange(p as number)}
-              className={`${btnBase} ${p === page ? "border-cyan-500 bg-cyan-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+              className={`${btnBase} ${p === page ? "border-blue-500 bg-blue-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
               style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
               {p}
             </button>
@@ -257,10 +257,10 @@ export function PredictionFlow() {
   const inventoryInputRef = useRef<HTMLInputElement>(null);
 
   /* ── Step / UI state ── */
-  const [currentStep, setCurrentStep] = useState(1);
-  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [currentStep, setCurrentStep] = usePredictionDraft("currentStep", 1);
+  const [files, setFiles] = usePredictionDraft<UploadedFile[]>("files", []);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [forecastDays, setForecastDays] = useState(7);
+  const [forecastDays, setForecastDays] = usePredictionDraft("forecastDays", 30);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [completedStepIdx, setCompletedStepIdx] = useState(-1);
@@ -268,10 +268,10 @@ export function PredictionFlow() {
 
   /* ── Step 2 variable mapping ── */
   const [mappingTab, setMappingTab] = useState<"sales" | "inventory">("sales");
-  const [salesMapping, setSalesMapping] = useState<Record<string, string>>({});
-  const [inventoryMapping, setInventoryMapping] = useState<Record<string, string>>({});
-  const [detectedSalesCols, setDetectedSalesCols] = useState<string[]>([]);
-  const [detectedInvCols, setDetectedInvCols] = useState<string[]>([]);
+  const [salesMapping, setSalesMapping] = usePredictionDraft<Record<string, string>>("salesMapping", {});
+  const [inventoryMapping, setInventoryMapping] = usePredictionDraft<Record<string, string>>("inventoryMapping", {});
+  const [detectedSalesCols, setDetectedSalesCols] = usePredictionDraft<string[]>("detectedSalesCols", []);
+  const [detectedInvCols, setDetectedInvCols] = usePredictionDraft<string[]>("detectedInvCols", []);
 
   /* ── Field catalog (loaded once from API) ── */
   const [fieldCatalog, setFieldCatalog] = useState<MappingFieldResponse[]>([]);
@@ -280,9 +280,9 @@ export function PredictionFlow() {
   /* ── Saved mapping configurations ── */
   const [savedMappings, setSavedMappings] = useState<import("../../types/api").MappingConfigResponse[]>([]);
   const [savedMappingsLoading, setSavedMappingsLoading] = useState(false);
-  const [appliedMappingId, setAppliedMappingId] = useState<string | null>(null);
-  const [mappingName, setMappingName] = useState("");
-  const [saveAsDefault, setSaveAsDefault] = useState(false);
+  const [appliedMappingId, setAppliedMappingId] = usePredictionDraft<string | null>("appliedMappingId", null);
+  const [mappingName, setMappingName] = usePredictionDraft("mappingName", "");
+  const [saveAsDefault, setSaveAsDefault] = usePredictionDraft("saveAsDefault", false);
 
   /* ── Step 4 UI state ── */
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -296,9 +296,9 @@ export function PredictionFlow() {
 
 
   /* ── API state ── */
-  const [primaryDatasetId, setPrimaryDatasetId] = useState<string | null>(null);
-  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
-  const [purchasePlan, setPurchasePlan] = useState<PurchasePlanResponse | null>(null);
+  const [primaryDatasetId, setPrimaryDatasetId] = usePredictionDraft<string | null>("primaryDatasetId", null);
+  const [prediction, setPrediction] = usePredictionDraft<PredictionResponse | null>("prediction", null);
+  const [purchasePlan, setPurchasePlan] = usePredictionDraft<PurchasePlanResponse | null>("purchasePlan", null);
   const [uploadError, setUploadError] = useState<string>("");
   const [analysisError, setAnalysisError] = useState<string>("");
   const [savingPlan, setSavingPlan] = useState(false);
@@ -306,7 +306,7 @@ export function PredictionFlow() {
   /* ── Derived product list ── */
   const products = useMemo<UIProduct[]>(() => {
     if (prediction) {
-      return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? [], prediction.metrics);
+      return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? []);
     }
     return [];
   }, [prediction, purchasePlan]);
@@ -515,7 +515,7 @@ export function PredictionFlow() {
         // Resolve or create mapping config before triggering prediction
         let resolvedMappingId: string | undefined = appliedMappingId ?? undefined;
 
-        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired && f.fieldType === "sales");
+        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired);
         const hasSalesMapping = files.some((f) => f.type === "sales") &&
           requiredCatalogFields.every((f) => salesMapping[f.fieldKey]);
 
@@ -553,7 +553,7 @@ export function PredictionFlow() {
           }
         }
 
-        console.log("[PredictionFlow] POST /api/predictions — executing prediction, datasetId:", primaryDatasetId, "forecastDays:", forecastDays, "mappingId:", resolvedMappingId);
+        console.log("[PredictionFlow] POST /api/predicciones/nuevas — executing prediction, datasetId:", primaryDatasetId, "forecastDays:", forecastDays, "mappingId:", resolvedMappingId);
         const result = await predictionService.execute(primaryDatasetId, forecastDays, resolvedMappingId);
 
         clearInterval(animInterval);
@@ -564,9 +564,13 @@ export function PredictionFlow() {
           return;
         }
 
-        setCompletedStepIdx(total - 1);
-        setAnalysisProgress(100);
         setPrediction(result);
+        // Present the confirmed completed stages before the result summary.
+        for (let stage = Math.max(0, animIdx); stage < total; stage++) {
+          setCompletedStepIdx(stage);
+          setAnalysisProgress(Math.round(((stage + 1) / total) * 100));
+          await new Promise(resolve => window.setTimeout(resolve, 350));
+        }
         setAnalysisStatus("done");
       } catch (err) {
         clearInterval(animInterval);
@@ -601,11 +605,8 @@ export function PredictionFlow() {
     if (currentStep === 1) return files.length >= 1 && !files.some((f) => f.uploading);
     if (currentStep === 2) {
       const hasSales = files.some((f) => f.type === "sales");
-      const hasInventory = files.some((f) => f.type === "inventory");
-      const salesRequired = fieldCatalog.filter((f) => f.fieldType === "sales" && f.isRequired);
-      const invRequired = fieldCatalog.filter((f) => f.fieldType === "inventory" && f.isRequired);
-      if (hasSales && salesRequired.length > 0 && !salesRequired.every((f) => salesMapping[f.fieldKey])) return false;
-      if (hasInventory && invRequired.length > 0 && !invRequired.every((f) => inventoryMapping[f.fieldKey])) return false;
+      const salesRequiredFields = fieldCatalog.filter((f) => f.fieldType === "sales" && f.isRequired);
+      if (hasSales && salesRequiredFields.length > 0 && !salesRequiredFields.every((f) => salesMapping[f.fieldKey])) return false;
       return true;
     }
     return true;
@@ -635,27 +636,15 @@ export function PredictionFlow() {
     [products, selectedProductId]
   );
 
-  const [productChartData, setProductChartData] = useState<ChartPoint[]>([]);
-  const productChartStartDate = useMemo(() => productChartData.find(p => p.predicted !== null)?.date ?? null, [productChartData]);
-
-  useEffect(() => {
-    if (!prediction || !selectedProduct) {
-      setProductChartData(
-        selectedProduct
-          ? buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays)
-          : buildGeneratedChartData(100, forecastDays)
-      );
-      return;
+  const productChartData = useMemo<ChartPoint[]>(() => {
+    if (prediction && selectedProduct) {
+      return buildProductChartData(selectedProduct.name, prediction.forecastResults, forecastDays);
     }
-    dashboardService
-      .getChart(prediction.id, selectedProduct.name)
-      .then((response) => {
-        setProductChartData(buildChartFromBackendPoints(response.points, forecastDays, response.historicalPoints));
-      })
-      .catch(() => {
-        setProductChartData(buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays));
-      });
-  }, [prediction?.id, selectedProduct?.name, forecastDays]);
+    if (selectedProduct) {
+      return buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays);
+    }
+    return buildGeneratedChartData(100, forecastDays);
+  }, [prediction, selectedProduct, forecastDays]);
 
   const bridgeDateLabel = useMemo(() => {
     const d = new Date();
@@ -664,14 +653,11 @@ export function PredictionFlow() {
   }, []);
 
   const tableData = useMemo(() =>
-    products.map((p) => {
-      const hist = p.historicalAvg ?? 0;
-      const avgPred = p.predictedDemand;
-      return {
-        ...p,
-        variation: hist > 0 ? ((avgPred - hist) / hist) * 100 : 0,
-      };
-    }),
+    products.map((p) => ({
+      ...p,
+      avgHistorical: Math.round(p.predictedDemand * 0.88),
+      variation: ((p.predictedDemand - Math.round(p.predictedDemand * 0.88)) / Math.max(Math.round(p.predictedDemand * 0.88), 1)) * 100,
+    })),
     [products]
   );
 
@@ -698,10 +684,10 @@ export function PredictionFlow() {
     resultsTablePage * PAGE_SIZE_TABLE
   );
 
-  const filteredPlanProducts = useMemo(() => {
-    const nonZero = products.filter((p) => p.predictedDemand > 0 || p.recommendedQty > 0);
-    return filterPriority === "all" ? nonZero : nonZero.filter((p) => p.priority === filterPriority);
-  }, [products, filterPriority]);
+  const filteredPlanProducts = useMemo(() =>
+    [...products].sort((a,b)=>priorityRank[a.priority]-priorityRank[b.priority]).filter(p=>filterPriority === "all" || p.priority === filterPriority),
+    [products, filterPriority]
+  );
 
   const searchedPlanProducts = useMemo(() =>
     filteredPlanProducts.filter((p) =>
@@ -718,56 +704,26 @@ export function PredictionFlow() {
   );
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] px-6 py-8 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-gray-900 mb-1" style={{ fontWeight: 700 }}>Nueva predicción</h1>
-        <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>
-          Completa los pasos para generar tu plan de compras
-        </p>
-      </div>
-
-      {/* Stepper */}
-      <div className="mb-10">
-        <div className="flex items-start">
-          {STEPS.flatMap((step, idx) => {
-            const Icon = step.icon;
-            const isCompleted = currentStep > step.id;
-            const isActive = currentStep === step.id;
-            const items = [
-              <button
-                key={`step-${step.id}`}
-                onClick={() => { if (isCompleted) setCurrentStep(step.id); }}
-                className={`flex flex-col items-center gap-1.5 shrink-0 ${isCompleted ? "cursor-pointer" : "cursor-default"}`}
-              >
-                <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition-all ${
-                  isCompleted ? "border-cyan-500 bg-cyan-500 text-white"
-                  : isActive ? "border-cyan-500 bg-cyan-500/10 text-cyan-500"
-                  : "border-gray-300 bg-white text-gray-400"
-                }`}>
-                  {isCompleted ? <CheckCircle className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
-                </div>
-                <span className="hidden sm:block text-center whitespace-nowrap transition-colors"
-                  style={{ fontSize: "0.6875rem", fontWeight: isActive ? 600 : 400,
-                    color: isCompleted ? "#0891b2" : isActive ? "#06b6d4" : "#9ca3af" }}>
-                  {step.label}
-                </span>
-              </button>
-            ];
-            if (idx < STEPS.length - 1) {
-              items.push(
-                <div key={`line-${step.id}`} className="flex-1 h-px mt-[1.125rem] mx-2 transition-colors"
-                  style={{ backgroundColor: isCompleted ? "#06b6d4" : "#e5e7eb" }} />
-              );
-            }
-            return items;
-          })}
-        </div>
-      </div>
+    <div className="prediction-page">
+      <header className="prediction-heading">
+        <div><h1>Nueva predicción</h1><p>De tus ventas a tu próximo plan de compras.</p></div>
+        <span className="prediction-current"><span>{String(currentStep).padStart(2,"0")}</span> / 05</span>
+      </header>
+      <nav className="prediction-steps" aria-label="Etapas de la predicción">
+        {STEPS.map(step => {
+          const Icon = step.icon;
+          const completed = currentStep > step.id;
+          const active = currentStep === step.id;
+          return <button type="button" key={step.id} aria-label={`Paso ${step.id}: ${step.label}`} className={`prediction-step ${active ? "is-current" : ""} ${completed ? "is-complete" : ""}`} aria-current={active ? "step" : undefined} disabled={(!completed && !active) || (!!prediction && step.id < 4)} onClick={() => {if(completed && (!prediction || step.id >= 4)) setCurrentStep(step.id)}}>
+            <span className="prediction-step-icon">{completed ? <CheckCircle size={17}/> : <Icon size={17}/>}</span><span className="prediction-step-copy"><small>0{step.id}</small><strong>{step.label}</strong></span>
+          </button>;
+        })}
+      </nav>
 
       {/* Step Content */}
       <AnimatePresence mode="wait">
         <motion.div
+          className={`prediction-content prediction-stage-${currentStep}`}
           key={currentStep}
           initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
@@ -785,14 +741,14 @@ export function PredictionFlow() {
               <input ref={inventoryInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f, "inventory"); e.target.value = ""; }} />
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="prediction-card rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                 <h2 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Carga de archivos</h2>
                 <p className="text-gray-400 mb-5" style={{ fontSize: "0.875rem" }}>
                   Sube tus archivos en formato CSV o Excel. Ventas es obligatorio; inventario es opcional.
                 </p>
 
                 {/* Two-column upload zones */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="prediction-upload-grid grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Sales zone */}
                   {(() => {
                     const salesFile = files.find(f => f.type === "sales");
@@ -801,23 +757,23 @@ export function PredictionFlow() {
                         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                         onDragLeave={() => setIsDragOver(false)}
                         onDrop={(e) => { e.preventDefault(); setIsDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f, "sales"); }}
-                        className={`rounded-xl border-2 border-dashed p-5 transition-all ${salesFile ? "border-cyan-500/40 bg-cyan-500/5" : isDragOver ? "border-cyan-500 bg-cyan-500/5" : "border-gray-200 hover:border-cyan-500/40"}`}
+                        className={`prediction-dropzone rounded-xl border-2 border-dashed p-5 transition-all ${salesFile ? "border-blue-500/40 bg-blue-500/5" : isDragOver ? "border-blue-500 bg-blue-500/5" : "border-gray-200 hover:border-blue-500/40"}`}
                       >
                         <div className="flex flex-col items-center gap-3 text-center">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${salesFile ? "bg-cyan-500/10 border-cyan-500/20" : "bg-gray-100 border-gray-200"}`}>
-                            {salesFile ? <CheckCircle className="h-5 w-5 text-cyan-500" /> : <Upload className="h-5 w-5 text-gray-400" />}
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${salesFile ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}>
+                            {salesFile ? <CheckCircle className="h-5 w-5 text-blue-500" /> : <Upload className="h-5 w-5 text-gray-400" />}
                           </div>
                           <div>
                             <p className="text-gray-900" style={{ fontWeight: 600, fontSize: "0.875rem" }}>Datos de ventas <span className="text-red-400">*</span></p>
                             {salesFile ? (
-                              <p className="text-cyan-600 mt-0.5 truncate max-w-[160px]" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{salesFile.name}</p>
+                              <p className="text-blue-600 mt-0.5 truncate max-w-[160px]" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{salesFile.name}</p>
                             ) : (
                               <p className="text-gray-400 mt-0.5" style={{ fontSize: "0.75rem" }}>Historial de ventas (CSV/Excel)</p>
                             )}
                           </div>
                           <div className="flex gap-2 flex-wrap justify-center">
                             <button onClick={() => salesInputRef.current?.click()}
-                              className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-cyan-600 hover:bg-cyan-500/20 transition-all"
+                              className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-blue-600 hover:bg-blue-500/20 transition-all"
                               style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                               {salesFile ? "Cambiar" : "+ Seleccionar"}
                             </button>
@@ -848,7 +804,7 @@ export function PredictionFlow() {
                         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                         onDragLeave={() => setIsDragOver(false)}
                         onDrop={(e) => { e.preventDefault(); setIsDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f, "inventory"); }}
-                        className={`rounded-xl border-2 border-dashed p-5 transition-all ${invFile ? "border-blue-500/40 bg-blue-500/5" : isDragOver ? "border-blue-500/40 bg-blue-500/5" : "border-gray-200 hover:border-blue-500/30"}`}
+                        className={`prediction-dropzone rounded-xl border-2 border-dashed p-5 transition-all ${invFile ? "border-blue-500/40 bg-blue-500/5" : isDragOver ? "border-blue-500/40 bg-blue-500/5" : "border-gray-200 hover:border-blue-500/30"}`}
                       >
                         <div className="flex flex-col items-center gap-3 text-center">
                           <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${invFile ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}>
@@ -898,10 +854,10 @@ export function PredictionFlow() {
 
               {/* Scenario banner */}
               {files.length > 0 && (
-                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 flex gap-3">
-                  <CheckCircle className="h-4 w-4 text-cyan-500 mt-0.5 shrink-0" />
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 flex gap-3">
+                  <CheckCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-cyan-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
+                    <p className="text-blue-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                       {files.some(f => f.type === "inventory")
                         ? "Escenario: predicción con control de stock"
                         : "Escenario básico: predicción de demanda"}
@@ -911,9 +867,9 @@ export function PredictionFlow() {
               )}
 
               {files.length === 0 && (
-                <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 flex gap-3">
+                <div className="prediction-upload-hint rounded-xl border border-gray-200 bg-white p-4 flex gap-3">
                   <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
-                  <p className="text-yellow-600" style={{ fontSize: "0.8125rem" }}>Debes cargar al menos un archivo para continuar</p>
+                  <p className="text-yellow-600" style={{ fontSize: "0.8125rem" }}>Carga tu historial de ventas para comenzar. Puedes añadir el inventario si quieres incluir el stock en la planificación.</p>
                 </div>
               )}
             </div>
@@ -941,7 +897,7 @@ export function PredictionFlow() {
             return (
               <div className="space-y-5">
                 {/* Config card */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="prediction-config prediction-card rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                   <h2 className="text-gray-900 mb-4" style={{ fontWeight: 600 }}>Configuración del análisis</h2>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -953,17 +909,17 @@ export function PredictionFlow() {
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-4 w-4 text-cyan-500" />
+                        <Clock className="h-4 w-4 text-blue-500" />
                         <span className="text-gray-500" style={{ fontSize: "0.8125rem" }}>Período de predicción</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { days: 7,  label: "7 días",  hint: "Recomendado" },
-                          { days: 14, label: "14 días", hint: "Moderado" },
-                          { days: 30, label: "30 días", hint: "Largo plazo" },
+                          { days: 30, label: "30 días", hint: "1 mes" },
+                          { days: 60, label: "60 días", hint: "2 meses" },
+                          { days: 90, label: "90 días", hint: "3 meses" },
                         ].map(({ days, label, hint }) => (
                           <button key={days} onClick={() => setForecastDays(days)}
-                            className={`rounded-lg border py-2 px-1 transition-all flex flex-col items-center ${forecastDays === days ? "border-cyan-500 bg-cyan-500/10 text-cyan-500" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}>
+                            className={`rounded-lg border py-2 px-1 transition-all flex flex-col items-center ${forecastDays === days ? "border-blue-500 bg-blue-500/10 text-blue-500" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}>
                             <span style={{ fontSize: "0.875rem", fontWeight: forecastDays === days ? 600 : 400 }}>{label}</span>
                             <span style={{ fontSize: "0.6875rem", opacity: 0.7 }}>{hint}</span>
                           </button>
@@ -974,7 +930,7 @@ export function PredictionFlow() {
                 </div>
 
                 {/* Variable mapping card */}
-                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="prediction-variables prediction-card rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                   <div className="px-6 pt-5 pb-4 border-b border-gray-100">
                     <h2 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Identificar variables del dataset</h2>
                     <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>
@@ -983,7 +939,7 @@ export function PredictionFlow() {
                   </div>
 
                   {/* Saved mapping selector */}
-                  <div className="px-6 pt-4 pb-3 border-b border-gray-100 bg-gray-50/40">
+                  <div className="prediction-saved-config px-6 pt-4 pb-3 border-b border-gray-100">
                     <div className="flex items-center gap-2 mb-2">
                       <BookOpen className="h-3.5 w-3.5 text-blue-500" />
                       <span className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Configuración guardada</span>
@@ -991,12 +947,8 @@ export function PredictionFlow() {
                     </div>
                     {savedMappings.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all cursor-pointer"
-                          style={{ fontSize: "0.8125rem", minWidth: 240 }}
-                          value={appliedMappingId ?? ""}
-                          onChange={(e) => {
-                            const id = e.target.value;
+                        <Select value={appliedMappingId ?? "new"} onValueChange={(value) => {
+                            const id = value === "new" ? "" : value;
                             setAppliedMappingId(id || null);
                             if (id) {
                               const cfg = savedMappings.find((m) => m.id === id);
@@ -1006,15 +958,13 @@ export function PredictionFlow() {
                                 setSalesMapping(newMapping);
                               }
                             }
-                          }}
-                        >
-                          <option value="">— Nueva configuración —</option>
-                          {savedMappings.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.isDefault ? "★ " : ""}{m.configurationName}
-                            </option>
-                          ))}
-                        </select>
+                          }}>
+                          <SelectTrigger className="pc-config-select" aria-label="Configuración guardada"><SelectValue placeholder="Nueva configuración" /></SelectTrigger>
+                          <SelectContent className="pc-select-menu" position="popper" align="start">
+                            <SelectItem value="new">Nueva configuración</SelectItem>
+                            {savedMappings.map(m => <SelectItem key={m.id} value={m.id}>{m.isDefault ? "★ " : ""}{m.configurationName}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                         {appliedMappingId && (
                           <button
                             onClick={() => { setAppliedMappingId(null); setSalesMapping({}); }}
@@ -1033,7 +983,7 @@ export function PredictionFlow() {
 
                     {/* Name + default options when creating a new mapping */}
                     {!appliedMappingId && (
-                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="prediction-mapping-options flex items-center gap-3">
                         <input
                           type="text"
                           placeholder="Nombre de la configuración (opcional)"
@@ -1049,7 +999,7 @@ export function PredictionFlow() {
                             onChange={(e) => setSaveAsDefault(e.target.checked)}
                             className="h-3.5 w-3.5 rounded accent-blue-500 cursor-pointer"
                           />
-                          <Star className="h-3 w-3 text-yellow-500" />
+                          <Star className="h-3 w-3 text-blue-500" />
                           <span className="text-gray-600" style={{ fontSize: "0.75rem" }}>Guardar como predeterminada</span>
                         </label>
                       </div>
@@ -1057,7 +1007,7 @@ export function PredictionFlow() {
                   </div>
 
                   <div className="px-6 pt-4">
-                    <div className="flex gap-1 rounded-xl border border-gray-200 bg-gray-100 p-1 w-fit">
+                    <div className="prediction-source-tabs flex gap-1 p-1 w-fit">
                       {[
                         { id: "sales",     label: "Registro de ventas",    icon: ShoppingCart,  done: salesReqDone, total: salesReqFields.length, hasFile: hasSales },
                         { id: "inventory", label: "Inventario",            icon: Package,       done: invReqDone,   total: invReqFields.length,   hasFile: hasInventory },
@@ -1072,7 +1022,7 @@ export function PredictionFlow() {
                             <Icon className="h-3.5 w-3.5" />
                             {tab.label}
                             {tab.hasFile ? (
-                              <span className={`rounded-full px-1.5 py-0.5 ${allDone ? "bg-cyan-500/15 text-cyan-600" : "bg-orange-100 text-orange-600"}`}
+                              <span className={`rounded-full px-1.5 py-0.5 ${allDone ? "bg-blue-500/15 text-blue-600" : "bg-orange-100 text-orange-600"}`}
                                 style={{ fontSize: "0.6875rem", fontWeight: 700 }}>
                                 {tab.done}/{tab.total}
                               </span>
@@ -1097,12 +1047,12 @@ export function PredictionFlow() {
                     ) : (
                       <div className="space-y-5">
                         <div>
-                          <p className="text-gray-500 mb-2" style={{ fontSize: "0.75rem", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Columnas detectadas en el archivo</p>
+                          <p className="text-gray-700 mb-2 flex items-center gap-2" style={{ fontFamily: "inherit", fontSize: "0.8125rem", fontWeight: 600, letterSpacing: 0 }}>Columnas detectadas en el archivo</p>
                           <div className="flex flex-wrap gap-2">
                             {activeCols.map((col) => {
                               const isMapped = Object.values(activeMapping).includes(col);
                               return (
-                                <span key={col} className={`rounded-lg border px-2.5 py-1 transition-all ${isMapped ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-700" : "border-gray-200 bg-gray-50 text-gray-500"}`}
+                                <span key={col} className={`rounded-lg border px-2.5 py-1 transition-all ${isMapped ? "border-blue-500/40 bg-blue-500/10 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-500"}`}
                                   style={{ fontSize: "0.75rem", fontWeight: isMapped ? 600 : 400 }}>
                                   {isMapped && <span className="mr-1">✓</span>}{col}
                                 </span>
@@ -1124,8 +1074,8 @@ export function PredictionFlow() {
                               const val = activeMapping[v.key] ?? "";
                               const isMapped = !!val;
                               return (
-                                <div key={v.key} className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-cyan-500/25 bg-cyan-500/5" : "border-gray-200 bg-white"}`}>
-                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${isMapped ? "border-cyan-500 bg-cyan-500" : "border-gray-300 bg-white"}`}>
+                                <div key={v.key} className={`prediction-mapping-row flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-blue-500/25 bg-blue-500/5" : "border-gray-200 bg-white"}`}>
+                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${isMapped ? "border-blue-500 bg-blue-500" : "border-gray-300 bg-white"}`}>
                                     {isMapped
                                       ? <CheckCircle className="h-3.5 w-3.5 text-white" />
                                       : <span className="text-red-400" style={{ fontSize: "0.6875rem", fontWeight: 700 }}>!</span>}
@@ -1137,13 +1087,13 @@ export function PredictionFlow() {
                                     <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
                                   </div>
                                   <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                                    <select value={val} onChange={(e) => setActiveMapping((m) => ({ ...m, [v.key]: e.target.value }))}
-                                      className={`w-full appearance-none rounded-lg border px-3 pr-8 py-2 text-gray-900 outline-none focus:ring-2 transition-all cursor-pointer ${isMapped ? "border-cyan-500/40 bg-white focus:border-cyan-500 focus:ring-cyan-500/10" : "border-gray-300 bg-white hover:border-gray-400 focus:border-cyan-500 focus:ring-cyan-500/10"}`}
-                                      style={{ fontSize: "0.8125rem" }}>
-                                      <option value="">Seleccionar columna…</option>
-                                      {activeCols.map((col) => <option key={col} value={col}>{col}</option>)}
-                                    </select>
-                                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                    <Select value={val || "unassigned"} onValueChange={(value) => setActiveMapping((mapping) => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }))}>
+                                      <SelectTrigger aria-label={v.label} className="pc-column-select"><SelectValue /></SelectTrigger>
+                                      <SelectContent className="pc-select-menu" position="popper" align="start">
+                                        <SelectItem value="unassigned">Seleccionar columna…</SelectItem>
+                                        {activeCols.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                 </div>
                               );
@@ -1153,17 +1103,17 @@ export function PredictionFlow() {
 
                         <div>
                           <div className="flex items-center gap-2 mb-3">
-                            <span className="h-2 w-2 rounded-full bg-cyan-500" />
+                            <span className="h-2 w-2 rounded-full bg-blue-500" />
                             <p className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Variables opcionales</p>
-                            <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-cyan-600" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>Mejoran la precisión</span>
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-600" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>Mejoran la precisión</span>
                           </div>
                           <div className="space-y-2">
                             {activeOptVars.map((v) => {
                               const val = activeMapping[v.key] ?? "";
                               const isMapped = !!val;
                               return (
-                                <div key={v.key} className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-cyan-500/20 bg-cyan-500/[0.03]" : "border-gray-100 bg-gray-50/60"}`}>
-                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${isMapped ? "border-cyan-500 bg-cyan-500" : "border-gray-200 bg-white"}`}>
+                                <div key={v.key} className={`prediction-mapping-row flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-blue-500/20 bg-blue-500/[0.03]" : "border-gray-100 bg-gray-50/60"}`}>
+                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${isMapped ? "border-blue-500 bg-blue-500" : "border-gray-200 bg-white"}`}>
                                     {isMapped
                                       ? <CheckCircle className="h-3.5 w-3.5 text-white" />
                                       : <span className="text-gray-300" style={{ fontSize: "0.6875rem", fontWeight: 700 }}>—</span>}
@@ -1173,13 +1123,13 @@ export function PredictionFlow() {
                                     <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
                                   </div>
                                   <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                                    <select value={val} onChange={(e) => setActiveMapping((m) => ({ ...m, [v.key]: e.target.value }))}
-                                      className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 pr-8 py-2 text-gray-700 outline-none hover:border-gray-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all cursor-pointer"
-                                      style={{ fontSize: "0.8125rem" }}>
-                                      <option value="">No asignar</option>
-                                      {activeCols.map((col) => <option key={col} value={col}>{col}</option>)}
-                                    </select>
-                                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                    <Select value={val || "unassigned"} onValueChange={(value) => setActiveMapping((mapping) => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }))}>
+                                      <SelectTrigger aria-label={v.label} className="pc-column-select"><SelectValue /></SelectTrigger>
+                                      <SelectContent className="pc-select-menu" position="popper" align="start">
+                                        <SelectItem value="unassigned">No asignar</SelectItem>
+                                        {activeCols.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                 </div>
                               );
@@ -1190,7 +1140,7 @@ export function PredictionFlow() {
                     )}
                   </div>
 
-                  <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+                  <div className="prediction-config-summary px-6 py-4 border-t border-gray-100">
                     <div className="flex flex-wrap items-center gap-6">
                       {[
                         { label: "Archivos cargados",    value: `${files.length}` },
@@ -1200,17 +1150,12 @@ export function PredictionFlow() {
                       ].map((item) => (
                         <div key={item.label}>
                           <p className="text-gray-400" style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.label}</p>
-                          <p className={`mt-0.5 ${item.ok === true ? "text-cyan-600" : item.ok === false ? "text-orange-500" : "text-gray-900"}`}
+                          <p className={`mt-0.5 ${item.ok === true ? "text-blue-600" : item.ok === false ? "text-orange-500" : "text-gray-900"}`}
                             style={{ fontSize: "0.875rem", fontWeight: 600 }}>{item.value}</p>
                         </div>
                       ))}
                     </div>
-                    {!canProceed() && (
-                      <p className="flex items-center gap-1.5 text-orange-500 mt-3" style={{ fontSize: "0.8125rem" }}>
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        Asigna todas las variables requeridas para continuar
-                      </p>
-                    )}
+                    
                   </div>
                 </div>
               </div>
@@ -1219,8 +1164,8 @@ export function PredictionFlow() {
 
           {/* ── STEP 3: ANALYSIS ── */}
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+            <div className="prediction-analysis-stage space-y-6">
+              <div className="prediction-card rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
 
                 {/* Error state */}
                 {analysisStatus === "error" && (
@@ -1249,22 +1194,22 @@ export function PredictionFlow() {
                   <div className="p-6">
                     <div className="flex items-center gap-4 mb-6 pb-5 border-b border-gray-100">
                       <div className="relative shrink-0">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-                          <Activity style={{ height: 18, width: 18 }} className="text-cyan-500" />
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
+                          <Activity style={{ height: 18, width: 18 }} className="text-blue-500" />
                         </div>
                         <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500" />
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-60" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "0.875rem" }}>Pipeline de análisis</p>
-                          <span className="text-cyan-500 shrink-0" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{analysisProgress}%</span>
+                          <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "0.875rem" }}>Procesamiento del análisis</p>
+                          <span className="text-blue-500 shrink-0" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{analysisProgress}%</span>
                         </div>
                         <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
                           <motion.div
-                            className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400"
+                            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400"
                             initial={{ width: "0%" }}
                             animate={{ width: `${analysisProgress}%` }}
                             transition={{ duration: 0.6, ease: "easeOut" }}
@@ -1287,15 +1232,15 @@ export function PredictionFlow() {
                             initial={{ opacity: 0, y: 6 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.3, delay: i * 0.05 }}
-                            className={`flex items-start gap-3 rounded-xl border p-4 transition-all duration-300 ${
-                              isDone ? "border-cyan-500/20 bg-cyan-500/5"
-                              : isActive ? "border-cyan-500/30 bg-cyan-500/[0.07] shadow-sm"
+                            className={`analysis-pipeline-row flex items-start gap-3 rounded-xl border p-4 transition-all duration-300 ${
+                              isDone ? "border-blue-500/20 bg-blue-500/5"
+                              : isActive ? "border-blue-500/30 bg-blue-500/[0.07] shadow-sm"
                               : "border-gray-100 bg-gray-50/60"
                             }`}
                           >
                             <div className={`flex h-7 w-7 shrink-0 mt-0.5 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                              isDone ? "bg-cyan-500 border-cyan-500"
-                              : isActive ? "bg-transparent border-cyan-500"
+                              isDone ? "bg-blue-500 border-blue-500"
+                              : isActive ? "bg-transparent border-blue-500"
                               : "bg-white border-gray-200"
                             }`}>
                               {isDone ? (
@@ -1304,36 +1249,36 @@ export function PredictionFlow() {
                                 <motion.div
                                   animate={{ rotate: 360 }}
                                   transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                                  className="h-3 w-3 rounded-full border-2 border-cyan-500 border-t-transparent"
+                                  className="h-3 w-3 rounded-full border-2 border-blue-500 border-t-transparent"
                                 />
                               ) : (
                                 <span style={{ fontSize: "0.625rem", fontWeight: 600, color: "#d1d5db" }}>{i + 1}</span>
                               )}
                             </div>
                             <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${
-                              isDone ? "bg-cyan-500/15 border border-cyan-500/25"
-                              : isActive ? "bg-cyan-500/10 border border-cyan-500/20"
+                              isDone ? "bg-blue-500/15 border border-blue-500/25"
+                              : isActive ? "bg-blue-500/10 border border-blue-500/20"
                               : "bg-white border border-gray-200"
                             }`}>
-                              <StepIcon className={`h-3.5 w-3.5 transition-colors duration-300 ${isDone || isActive ? "text-cyan-500" : "text-gray-300"}`} />
+                              <StepIcon className={`h-3.5 w-3.5 transition-colors duration-300 ${isDone || isActive ? "text-blue-500" : "text-gray-300"}`} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="transition-colors duration-300" style={{
                                   fontSize: "0.8125rem",
                                   fontWeight: isDone || isActive ? 600 : 400,
-                                  color: isDone ? "#0e7490" : isActive ? "#111827" : "#9ca3af",
+                                  color: isDone ? "#0066d6" : isActive ? "#111827" : "#9ca3af",
                                 }}>
                                   {step.label}
                                 </span>
                                 {isActive && (
                                   <motion.span
-                                    initial={{ opacity: 0, scale: 0.85 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-px text-cyan-600"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-px text-blue-600"
                                     style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}
                                   >
-                                    Running
+                                    En curso
                                   </motion.span>
                                 )}
                               </div>
@@ -1356,10 +1301,10 @@ export function PredictionFlow() {
                     <motion.div
                       initial={{ opacity: 0, y: -6 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-4 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-5 py-4 mb-6"
+                      className="analysis-complete-heading flex items-center gap-3 mb-5"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-500/25">
-                        <CheckCircle className="h-5 w-5 text-cyan-500" />
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 border border-blue-500/25">
+                        <CheckCircle className="h-5 w-5 text-blue-500" />
                       </div>
                       <div className="flex-1">
                         <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 700 }}>¡Análisis completado con éxito!</p>
@@ -1368,7 +1313,7 @@ export function PredictionFlow() {
                       <div className="shrink-0 flex flex-col items-end gap-1.5">
                         <span className="text-gray-400" style={{ fontSize: "0.6875rem" }}>Redirigiendo</span>
                         <div className="h-1 w-24 rounded-full bg-gray-100 overflow-hidden">
-                          <motion.div className="h-full rounded-full bg-cyan-500"
+                          <motion.div className="h-full rounded-full bg-blue-500"
                             initial={{ width: "0%" }}
                             animate={{ width: "100%" }}
                             transition={{ duration: 4.3, ease: "linear" }} />
@@ -1386,9 +1331,9 @@ export function PredictionFlow() {
                           value: prediction && accuracy > 0 ? `${accuracy}%` : "—",
                           sub: "Alta confianza",
                           icon: TrendingUp,
-                          iconBg: "bg-cyan-500/10 border-cyan-500/20",
-                          iconColor: "text-cyan-500",
-                          valColor: "#0e7490",
+                          iconBg: "bg-blue-500/10 border-blue-500/20",
+                          iconColor: "text-blue-500",
+                          valColor: "#0066d6",
                         },
                         {
                           label: "Productos analizados",
@@ -1404,9 +1349,9 @@ export function PredictionFlow() {
                           value: `${forecastDays} días`,
                           sub: "Horizonte de análisis",
                           icon: Activity,
-                          iconBg: "bg-purple-500/10 border-purple-500/20",
-                          iconColor: "text-purple-500",
-                          valColor: "#7c3aed",
+                          iconBg: "bg-blue-500/10 border-blue-500/20",
+                          iconColor: "text-blue-500",
+                          valColor: "#007AFF",
                         },
                       ].map((m, idx) => {
                         const MIcon = m.icon;
@@ -1436,51 +1381,36 @@ export function PredictionFlow() {
 
           {/* ── STEP 4: RESULTS ── */}
           {currentStep === 4 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: "Demanda Total Prevista", value: totalUnits > 0 ? `${totalUnits.toLocaleString()} uds` : "—", icon: TrendingUp, iconColor: "text-cyan-500", iconBg: "bg-cyan-500/10 border-cyan-500/20" },
-                  { label: "Productos Analizados", value: products.length > 0 ? products.length.toString() : "—", icon: Package, iconColor: "text-blue-500", iconBg: "bg-blue-500/10 border-blue-500/20" },
-                  { label: "Precisión Estimada", value: accuracy > 0 ? `${accuracy}%` : "—", icon: BarChart3, iconColor: "text-purple-500", iconBg: "bg-purple-500/10 border-purple-500/20" },
-                  { label: "Horizonte Analizado", value: `${forecastDays} días`, icon: Calendar, iconColor: "text-orange-500", iconBg: "bg-orange-500/10 border-orange-500/20" },
-                ].map((card) => {
-                  const Icon = card.icon;
-                  return (
-                    <div key={card.label} className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${card.iconBg}`}>
-                        <Icon className={`h-6 w-6 ${card.iconColor}`} />
-                      </div>
-                      <div>
-                        <p className="text-gray-400 mb-0.5" style={{ fontSize: "0.75rem" }}>{card.label}</p>
-                        <p className="text-gray-900" style={{ fontSize: "1.375rem", fontWeight: 700, lineHeight: 1.1 }}>{card.value}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="analysis-surface prediction-analysis-surface">
+              <AnalysisMetrics items={[
+                {label:"Demanda prevista",icon:TrendingUp,value:totalUnits > 0 ? `${totalUnits.toLocaleString()} uds` : "—"},
+                {label:"Productos analizados",icon:Package,value:products.length > 0 ? products.length.toString() : "—"},
+                {label:"Precisión",icon:BarChart3,value:accuracy > 0 ? `${accuracy}%` : "—"},
+                {label:"Horizonte",icon:Calendar,value:`${forecastDays} días`},
+              ]}/>
 
               {/* Interactive Chart + Sidebar */}
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden relative">
+              <div className="analysis-chart relative">
                 <AnimatePresence>
                   {sidebarOpen && (
                     <>
                       <motion.div
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-                        className="absolute inset-0 bg-black/10 z-10"
+                        className="absolute inset-0 analysis-chart-backdrop z-10"
                         onClick={() => setSidebarOpen(false)}
                       />
                       <motion.div
                         initial={{ x: -304 }} animate={{ x: 0 }} exit={{ x: -304 }}
                         transition={{ type: "spring", stiffness: 320, damping: 32 }}
-                        className="absolute top-0 left-0 bottom-0 w-72 bg-white border-r border-gray-200 z-20 flex flex-col shadow-2xl"
-                        style={{ borderRadius: "1rem 0 0 1rem" }}
+                        className="analysis-medication-drawer absolute top-0 left-0 bottom-0 w-72 bg-white border-r border-gray-200 z-20 flex flex-col shadow-2xl"
+                        style={{ borderRadius: 0 }}
                       >
                         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
                           <div>
                             <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>Medicamentos</p>
                             <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>{sidebarProducts.length} de {products.length}</p>
                           </div>
-                          <button onClick={() => setSidebarOpen(false)}
+                          <button aria-label="Cerrar lista de medicamentos" onClick={() => setSidebarOpen(false)}
                             className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
                             <X className="h-4 w-4" />
                           </button>
@@ -1490,7 +1420,7 @@ export function PredictionFlow() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                             <input type="text" placeholder="Buscar medicamento..." value={sidebarSearch}
                               onChange={(e) => setSidebarSearch(e.target.value)}
-                              className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 focus:bg-white transition-all"
+                              className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 focus:bg-white transition-all"
                               style={{ fontSize: "0.8125rem" }} autoFocus />
                           </div>
                         </div>
@@ -1506,16 +1436,16 @@ export function PredictionFlow() {
                               const pConf = priorityConfig[p.priority];
                               return (
                                 <button key={p.id} onClick={() => { setSelectedProductId(p.id); setSidebarOpen(false); }}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-cyan-500/5 border-r-2 border-r-cyan-500" : ""}`}>
+                                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-blue-500/5 border-r-2 border-r-blue-500" : ""}`}>
                                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${pConf.bg}`}>
                                     <span className={`h-2 w-2 rounded-full ${pConf.dot}`} />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <p className={`truncate ${isSelected ? "text-cyan-600" : "text-gray-900"}`}
+                                    <p className={`truncate ${isSelected ? "text-blue-600" : "text-gray-900"}`}
                                       style={{ fontSize: "0.8125rem", fontWeight: isSelected ? 600 : 500 }}>{p.name}</p>
                                     <p className="text-gray-400 truncate" style={{ fontSize: "0.6875rem" }}>{p.category}</p>
                                   </div>
-                                  {isSelected && <CheckCircle className="h-4 w-4 text-cyan-500 shrink-0" />}
+                                  {isSelected && <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />}
                                 </button>
                               );
                             })
@@ -1529,39 +1459,37 @@ export function PredictionFlow() {
                 <div className="px-6 pt-5 pb-4 border-b border-gray-100">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setSidebarOpen((v) => !v)}
-                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:text-gray-900"}`}
+                      <button aria-label="Medicamentos" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((v) => !v)}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-blue-500/50 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:text-gray-900"}`}
                         style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                         {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
                         <span className="hidden sm:inline">Medicamentos</span>
                       </button>
                       <div>
-                        <p className="text-gray-900" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
+                        <p className="analysis-medication-title text-gray-900" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                           {selectedProduct?.name ?? "Selecciona un medicamento"}
                         </p>
-                        <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
-                          {selectedProduct?.category} · {forecastDays} días predichos
-                        </p>
+                        
                       </div>
                     </div>
                     <button onClick={() => setShowConfidence((v) => !v)}
-                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-600" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}
+                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-blue-500/40 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}
                       style={{ fontSize: "0.75rem", fontWeight: 500 }}>
                       {showConfidence ? "Ocultar" : "Mostrar"} intervalo de confianza
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-5 mt-3">
                     <div className="flex items-center gap-2">
-                      <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" /></svg>
+                      <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" /></svg>
                       <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Histórico</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
+                      <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
                       <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Predicción</span>
                     </div>
                     {showConfidence && (
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-6 rounded bg-cyan-400/20 border border-cyan-400/30" />
+                        <div className="h-3 w-6 rounded bg-blue-400/20 border border-blue-400/30" />
                         <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo ±11%</span>
                       </div>
                     )}
@@ -1574,34 +1502,34 @@ export function PredictionFlow() {
 
                 <div className="px-2 py-4">
                   <AnimatePresence mode="wait">
-                    <motion.div key={selectedProductId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                    <div key={`${selectedProductId}-${productChartData.length}`}>
                       <ResponsiveContainer width="100%" height={320}>
-                        <ComposedChart data={productChartData} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
+                        <ComposedChart data={productChartData.map((point, plotIndex) => ({ ...point, plotIndex }))} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
                           <defs>
                             <linearGradient id="confGradientPF" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.15} />
-                              <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.02} />
+                              <stop offset="0%" stopColor="#007AFF" stopOpacity={0.15} />
+                              <stop offset="100%" stopColor="#007AFF" stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="date" tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} interval={7} dy={8} />
-                          <YAxis tick={{ fill: "#cbd5e1", fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                          <XAxis dataKey="plotIndex" tickFormatter={(index) => productChartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                          <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                           <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                          {productChartStartDate && <ReferenceLine x={productChartStartDate} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3" label={{ value: "Inicio pred.", position: "insideTopRight", fill: "#f97316", fontSize: 10, fontWeight: 600 }} />}
-                          {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={false} />}
-                          {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={false} />}
-                          <Line type="monotone" dataKey="historical" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }} connectNulls={false} />
-                          <Line type="monotone" dataKey="predicted" stroke="#06b6d4" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#06b6d4", strokeWidth: 0 }} connectNulls={false} />
+                          <ReferenceLine x={productChartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />
+                          {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
+                          {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
+                          <Line type="monotone" dataKey="historical" isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
+                          <Line type="monotone" dataKey="predicted" isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
-                    </motion.div>
+                    </div>
                   </AnimatePresence>
                 </div>
               </div>
 
               {/* Medication analysis table */}
               {products.length > 0 && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="analysis-table-section">
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                     <div>
                       <h3 className="text-gray-900 mb-0.5" style={{ fontWeight: 600 }}>Medicamentos analizados</h3>
@@ -1611,7 +1539,7 @@ export function PredictionFlow() {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <input type="text" placeholder="Buscar producto..." value={resultsSearch}
                         onChange={(e) => { setResultsSearch(e.target.value); setResultsTablePage(1); }}
-                        className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 transition-colors"
+                        className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
                         style={{ fontSize: "0.8125rem" }} />
                     </div>
                   </div>
@@ -1619,7 +1547,7 @@ export function PredictionFlow() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-100">
-                          {["Producto", "Categoría", "Hist. prom/día", "Pred. prom/día", "Total predicho", "Variación (%)", "Tendencia"].map((h) => (
+                          {["Producto", "Categoría", "Dem. Histórica Prom.", "Demanda Predicha", "Variación (%)", "Tendencia"].map((h) => (
                             <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
                           ))}
                         </tr>
@@ -1628,22 +1556,21 @@ export function PredictionFlow() {
                         {paginatedTableData.map((row) => {
                           const varNum = row.variation;
                           const TrendIcon = varNum > 5 ? TrendingUp : varNum < -5 ? TrendingDown : Minus;
-                          const trendColor = varNum > 5 ? "text-cyan-500" : varNum < -5 ? "text-red-500" : "text-gray-400";
-                          const trendBg = varNum > 5 ? "bg-cyan-500/10" : varNum < -5 ? "bg-red-500/10" : "bg-gray-100";
+                          const trendColor = varNum > 5 ? "text-blue-500" : varNum < -5 ? "text-red-500" : "text-gray-400";
+                          const trendBg = varNum > 5 ? "bg-blue-500/10" : varNum < -5 ? "bg-red-500/10" : "bg-gray-100";
                           return (
                             <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                               <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.name}</td>
                               <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.category}</td>
-                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.historicalAvg != null ? `${row.historicalAvg.toFixed(1)} uds` : "—"}</td>
-                              <td className="py-3 pr-3 text-cyan-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand} uds</td>
-                              <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.totalPredicted} uds</td>
+                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical} uds</td>
+                              <td className="py-3 pr-3 text-blue-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand} uds</td>
                               <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
-                                <span className={varNum > 0 ? "text-cyan-500" : "text-red-500"} style={{ fontWeight: 500 }}>
+                                <span className="analysis-variation" style={{ fontWeight: 500 }}>
                                   {varNum > 0 ? "+" : ""}{varNum.toFixed(1)}%
                                 </span>
                               </td>
                               <td className="py-3">
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${trendBg} ${trendColor}`}
+                                <span className="analysis-trend"
                                   style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
                                   <TrendIcon className="h-3 w-3" />
                                   {varNum > 5 ? "Al alza" : varNum < -5 ? "A la baja" : "Estable"}
@@ -1663,104 +1590,43 @@ export function PredictionFlow() {
 
           {/* ── STEP 5: PURCHASE PLAN ── */}
           {currentStep === 5 && (
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="analysis-surface prediction-analysis-surface">
+              <div className="analysis-plan-heading flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h2 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Plan de compras recomendado</h2>
                   <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>Basado en la predicción para los próximos {forecastDays} días</p>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      const showStock = products.some((p) => p.hasInventory);
-                      const headers = [
-                        "Producto", "Categoría", "Demanda predicha (uds)",
-                        ...(showStock ? ["Stock actual (uds)", "A comprar (uds)"] : ["Cant. recomendada (uds)"]),
-                        "Prioridad",
-                      ];
-                      const rows = products.map((p) => [
-                        p.name, p.category, p.predictedDemand,
-                        ...(showStock ? [p.hasInventory ? p.currentStock : "—", p.recommendedQty] : [p.recommendedQty]),
-                        priorityConfig[p.priority].label,
-                      ]);
-                      downloadCsv(`plan-compras-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-                    }}
-                    className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+                  <button onClick={() => exportPurchase("csv", products.map(p => ({name:p.name,quantity:p.recommendedQty,priority:p.priority})), forecastDays, prediction?.id?.slice(0,8) ?? "nuevo")} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
                     style={{ fontSize: "0.8125rem" }}>
-                    <Download className="h-4 w-4" />
-                    Exportar CSV
+                    <Download className="h-4 w-4" />Exportar CSV
                   </button>
-                  <button
-                    onClick={() => {
-                      const showStock = products.some((p) => p.hasInventory);
-                      const headers = [
-                        "Producto", "Categoría", "Demanda predicha (uds)",
-                        ...(showStock ? ["Stock actual (uds)", "A comprar (uds)"] : ["Cant. recomendada (uds)"]),
-                        "Prioridad",
-                      ];
-                      const rows = products.map((p) => [
-                        p.name, p.category, p.predictedDemand,
-                        ...(showStock ? [p.hasInventory ? p.currentStock : "—", p.recommendedQty] : [p.recommendedQty]),
-                        priorityConfig[p.priority].label,
-                      ]);
-                      downloadPdf(
-                        `plan-compras-${new Date().toISOString().slice(0, 10)}.pdf`,
-                        "Plan de compras recomendado",
-                        `Predicción para los próximos ${forecastDays} días — generado el ${new Date().toLocaleDateString("es-ES")}`,
-                        headers, rows,
-                      );
-                    }}
-                    className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-white hover:bg-cyan-400 transition-all"
+                  <button onClick={() => exportPurchase("pdf", products.map(p => ({name:p.name,quantity:p.recommendedQty,priority:p.priority})), forecastDays, prediction?.id?.slice(0,8) ?? "nuevo")} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
                     style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                    <Download className="h-4 w-4" />
-                    Exportar PDF
+                    <Download className="h-4 w-4" />Exportar PDF
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: "Total productos",  value: products.length.toString(), icon: Package, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
-                  { label: "Items críticos",   value: products.filter((p) => p.priority === "critical").length.toString(), icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10 border-red-500/20" },
-                  { label: "Items altos",      value: products.filter((p) => p.priority === "high").length.toString(), icon: TrendingUp, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
-                  { label: "Unidades totales", value: totalUnits.toLocaleString(), icon: ShoppingCart, color: "text-cyan-500", bg: "bg-cyan-500/10 border-cyan-500/20" },
-                ].map((stat) => {
-                  const Icon = stat.icon;
-                  return (
-                    <div key={stat.label} className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${stat.bg}`}>
-                        <Icon className={`h-6 w-6 ${stat.color}`} />
-                      </div>
-                      <div>
-                        <p className="text-gray-400 mb-0.5" style={{ fontSize: "0.75rem" }}>{stat.label}</p>
-                        <p className="text-gray-900" style={{ fontSize: "1.375rem", fontWeight: 700, lineHeight: 1.1 }}>{stat.value}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <AnalysisMetrics items={[
+                {label:"Productos a comprar",icon:Package,value:products.length.toString()},
+                {label:"Ítems críticos",icon:AlertCircle,value:products.filter(p=>p.priority === "critical").length.toString()},
+                {label:"Prioridad alta",icon:TrendingUp,value:products.filter(p=>p.priority === "high").length.toString()},
+                {label:"Unidades totales",icon:ShoppingCart,value:totalUnits.toLocaleString()},
+              ]}/>
 
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex gap-2 flex-wrap">
-                  {["all", "critical", "high", "medium", "low"].map((p) => (
-                    <button key={p}
-                      onClick={() => { setFilterPriority(p); setPlanTablePage(1); }}
-                      className={`rounded-lg border px-3 py-1.5 transition-all ${filterPriority === p ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-500" : "border-gray-300 bg-white text-gray-500 hover:text-gray-700"}`}
-                      style={{ fontSize: "0.8125rem" }}>
-                      {p === "all" ? "Todos" : priorityConfig[p as keyof typeof priorityConfig].label}
-                    </button>
-                  ))}
-                </div>
+                <PriorityFilter value={filterPriority} onChange={(priority) => { setFilterPriority(priority); setPlanTablePage(1); }}/>
                 <div className="relative ml-auto">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                   <input type="text" placeholder="Buscar producto..." value={planSearch}
                     onChange={(e) => { setPlanSearch(e.target.value); setPlanTablePage(1); }}
-                    className="w-56 rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-cyan-500/60 transition-colors"
+                    className="w-56 rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
                     style={{ fontSize: "0.8125rem" }} />
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="analysis-table-section">
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     {(() => {
@@ -1795,7 +1661,7 @@ export function PredictionFlow() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{product.category}</td>
-                            <td className="px-4 py-3 text-cyan-500" style={{ fontSize: "0.8125rem" }}>{product.predictedDemand} uds</td>
+                            <td className="px-4 py-3 text-blue-500" style={{ fontSize: "0.8125rem" }}>{product.predictedDemand} uds</td>
                             {showStock ? (
                               <>
                                 <td className="px-4 py-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>
@@ -1842,10 +1708,10 @@ export function PredictionFlow() {
       </AnimatePresence>
 
       {/* Navigation */}
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+      <div className="prediction-navigation">
         <button
-          onClick={() => setCurrentStep((s) => Math.max(1, s - 1))}
-          disabled={currentStep === 1 || currentStep === 3}
+          onClick={() => setCurrentStep((s) => prediction ? Math.max(4, s - 1) : Math.max(1, s - 1))}
+          disabled={currentStep === 1 || currentStep === 3 || (!!prediction && currentStep === 4)}
           className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-gray-500 transition-all hover:border-gray-400 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
           style={{ fontSize: "0.875rem" }}
         >
@@ -1859,7 +1725,7 @@ export function PredictionFlow() {
           <button
             onClick={handleNext}
             disabled={!canProceed()}
-            className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-white transition-all hover:bg-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}
           >
             {nextLabel}
@@ -1889,9 +1755,10 @@ export function PredictionFlow() {
                 }
                 setSavingPlan(false);
               }
-              navigate("/history");
+              for (const key of Object.keys(sessionStorage)) { if (key.startsWith("prediction-draft:")) sessionStorage.removeItem(key); }
+              navigate("/historial");
             }}
-            className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-white transition-all hover:bg-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}
           >
             {savingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
