@@ -1,9 +1,9 @@
+import { AuthFieldError } from "../components/AuthFieldError";
 import { AuthShell } from "../components/AuthShell";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import {
-  Activity, Eye, EyeOff, ArrowRight, Lock, Mail, AlertCircle,
-  CheckCircle2, Clock, ShoppingCart,
+  Activity, Eye, EyeOff, ArrowRight, Lock, Mail, CheckCircle2, Clock, ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
@@ -14,22 +14,26 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email || !password) {
-      setError("Por favor completa todos los campos.");
-      return;
-    }
+    const invalidEmail = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    setEmailError(invalidEmail ? "Ingresa un correo válido." : "");
+    if (!password) setError("Ingresa tu contraseña.");
+    else if (password.length < 6) setError("Usa al menos 6 caracteres.");
+    if (invalidEmail || password.length < 6) return;
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       navigate("/panel");
     } catch (err) {
-      setError(extractApiErrorMessage(err, "Correo o contraseña incorrectos."));
+      setError((err as { status?: number } | null)?.status === 401
+        ? "Correo o contraseña incorrectos."
+        : extractApiErrorMessage(err, "No se pudo iniciar sesión."));
     } finally {
       setLoading(false);
     }
@@ -42,17 +46,8 @@ export function Login() {
             </h1>
             </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                role="alert" className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3"
-              >
-                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                <p className="text-red-600" style={{ fontSize: "0.875rem" }}>{error}</p>
-              </motion.div>
-            )}
+          <form noValidate onSubmit={handleSubmit} className="space-y-5">
+
 
             <div className="space-y-1.5">
               <label htmlFor="login-email" className="text-gray-700" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
@@ -63,12 +58,13 @@ export function Login() {
                 <input id="login-email" name="login-email" autoComplete="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setEmailError(""); setError(""); }}
                   placeholder="tu@farmacia.com"
                   className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                   style={{ fontSize: "0.9375rem" }}
                 />
               </div>
+              <AuthFieldError message={emailError} />
             </div>
 
             <div className="space-y-1.5">
@@ -89,7 +85,7 @@ export function Login() {
                 <input id="login-password" name="login-password" autoComplete="current-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
                   placeholder="••••••••"
                   className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-12 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                   style={{ fontSize: "0.9375rem" }}
@@ -103,6 +99,7 @@ export function Login() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <AuthFieldError message={error} />
             </div>
 
             <button

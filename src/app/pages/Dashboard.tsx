@@ -1,3 +1,4 @@
+import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
 import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
@@ -233,16 +234,7 @@ export function Dashboard() {
     new Date(dateStr).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 
   // ── Loading / Error states ──
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-          <p className="text-gray-400" style={{ fontSize: "0.9375rem" }}>Cargando panel...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <WorkspaceLoading label="Cargando panel…" />;
 
   if (error) {
     return (

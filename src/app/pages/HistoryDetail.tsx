@@ -1,3 +1,4 @@
+import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
 import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
 import { useParams, useNavigate } from "react-router";
@@ -270,16 +271,7 @@ export function HistoryDetail() {
     new Date(dateStr).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 
   // ── Loading state ──
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Cargando predicción...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <WorkspaceLoading label="Cargando predicción…" />;
 
   // ── Error / no data state ──
   if (error || !summary?.latestPredictionId) {

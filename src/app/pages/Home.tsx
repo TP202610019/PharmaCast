@@ -94,7 +94,7 @@ export function Home() {
           
         </div>
       </section></div>
-      <div className="ph-overview-band"><section className="ph-benefits ph-section" id="producto">
+      <div className="ph-overview-band"><section className="ph-benefits ph-section" id="beneficios">
         <div className="ph-centered"><span className="ph-eyebrow">EL SIGUIENTE PASO PARA TU FARMACIA</span><h2>Tu inventario tiene una historia.<br /><span>Úsala para decidir lo que viene.</span></h2><p>Las ventas cambian. Tu planificación también debería hacerlo.<br />Conecta tus datos con las decisiones de cada día.</p></div>
         <div className="ph-bento">
           <article className="ph-bento-main"><span className="ph-bento-icon"><ChartNoAxesCombined size={25}/></span><h3>Que la demanda<br />no te tome por sorpresa.</h3><p>Reconoce cómo se mueve cada producto y explora su demanda proyectada para preparar tu siguiente compra.</p><figure className="ph-demand-preview">

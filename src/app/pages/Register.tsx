@@ -1,3 +1,5 @@
+import { AuthFieldError } from "../components/AuthFieldError";
+import { PasswordRequirements } from "../components/PasswordRequirements";
 import { AuthShell } from "../components/AuthShell";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -10,19 +12,12 @@ import {
   Mail,
   User,
   Building2,
-  AlertCircle,
   CheckCircle2,
   Clock,
   ShoppingCart,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
-
-const passwordRequirements = [
-  { label: "Al menos 8 caracteres", test: (p: string) => p.length >= 8 },
-  { label: "Una letra mayúscula", test: (p: string) => /[A-Z]/.test(p) },
-  { label: "Un número", test: (p: string) => /[0-9]/.test(p) },
-];
 
 export function Register() {
   const navigate = useNavigate();
@@ -36,41 +31,35 @@ export function Register() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    setFieldErrors((prev) => ({ ...prev, [key]: undefined, ...(key === "password" ? { confirmPassword: undefined } : {}) }));
+    setError("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!form.name || !form.email || !form.password || !form.confirmPassword) {
-      setError("Por favor completa todos los campos obligatorios.");
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      setError("Las contraseñas no coinciden.");
-      return;
-    }
-    if (form.password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
-    if (!/[A-Z]/.test(form.password)) {
-      setError("La contraseña debe incluir al menos una letra mayúscula.");
-      return;
-    }
-    if (!/[0-9]/.test(form.password)) {
-      setError("La contraseña debe incluir al menos un número.");
-      return;
-    }
+    const errors: typeof fieldErrors = {};
+    if (!form.name.trim()) errors.name = "Ingresa tu nombre.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Ingresa un correo válido.";
+    if (form.password.length < 8) errors.password = "Usa al menos 8 caracteres.";
+    else if (!/[A-Z]/.test(form.password)) errors.password = "Incluye una mayúscula.";
+    else if (!/[0-9]/.test(form.password)) errors.password = "Incluye un número.";
+    if (!form.confirmPassword) errors.confirmPassword = "Confirma tu contraseña.";
+    else if (form.password !== form.confirmPassword) errors.confirmPassword = "Las contraseñas no coinciden.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
 
     setLoading(true);
     try {
-      await register(form.name, form.email, form.password, form.pharmacy || "Mi Farmacia");
+      await register(form.name.trim(), form.email.trim(), form.password, form.pharmacy || "Mi Farmacia");
       navigate("/panel");
     } catch (err) {
       setError(extractApiErrorMessage(err, "No se pudo crear la cuenta. Intenta de nuevo."));
@@ -79,16 +68,7 @@ export function Register() {
     }
   };
 
-  const passwordStrength = passwordRequirements.filter((r) => r.test(form.password)).length;
-  const strengthLabel = ["Débil", "Regular", "Fuerte"][passwordStrength - 1] ?? "";
-  const strengthColor =
-    passwordStrength === 3
-      ? "bg-blue-500"
-      : passwordStrength === 2
-      ? "bg-yellow-400"
-      : passwordStrength === 1
-      ? "bg-red-400"
-      : "bg-gray-200";
+
 
   return <AuthShell mode="register"><div className="auth-form">
           <div className="mb-7">
@@ -97,17 +77,8 @@ export function Register() {
             </h1>
             </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                role="alert" className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3"
-              >
-                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                <p className="text-red-600" style={{ fontSize: "0.875rem" }}>{error}</p>
-              </motion.div>
-            )}
+          <form noValidate onSubmit={handleSubmit} className="space-y-4">
+
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -125,6 +96,7 @@ export function Register() {
                     style={{ fontSize: "0.875rem" }}
                   />
                 </div>
+                <AuthFieldError message={fieldErrors.name} />
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="register-pharmacy" className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
@@ -159,6 +131,7 @@ export function Register() {
                   style={{ fontSize: "0.875rem" }}
                 />
               </div>
+              <AuthFieldError message={fieldErrors.email} />
             </div>
 
             <div className="space-y-1.5">
@@ -186,46 +159,14 @@ export function Register() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <AuthFieldError message={fieldErrors.password} />
               {(passwordFocused || form.password.length > 0) && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   className="space-y-2 pt-1"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${strengthColor}`}
-                        style={{ width: `${(passwordStrength / 3) * 100}%` }}
-                      />
-                    </div>
-                    {strengthLabel && (
-                      <span
-                        className={`${
-                          passwordStrength === 3 ? "text-blue-500" : passwordStrength === 2 ? "text-yellow-500" : "text-red-400"
-                        }`}
-                        style={{ fontSize: "0.75rem", fontWeight: 500 }}
-                      >
-                        {strengthLabel}
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    {passwordRequirements.map((req) => {
-                      const met = req.test(form.password);
-                      return (
-                        <div key={req.label} className="flex items-center gap-1.5">
-                          <CheckCircle2 className={`h-3 w-3 transition-colors ${met ? "text-blue-500" : "text-gray-300"}`} />
-                          <span
-                            className={`transition-colors ${met ? "text-gray-600" : "text-gray-400"}`}
-                            style={{ fontSize: "0.75rem" }}
-                          >
-                            {req.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <PasswordRequirements password={form.password} />
                 </motion.div>
               )}
             </div>
@@ -259,9 +200,7 @@ export function Register() {
                   {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {form.confirmPassword && form.confirmPassword !== form.password && (
-                <p className="text-red-500" style={{ fontSize: "0.75rem" }}>Las contraseñas no coinciden</p>
-              )}
+              <AuthFieldError message={fieldErrors.confirmPassword || (form.confirmPassword && form.confirmPassword !== form.password ? "Las contraseñas no coinciden." : "")} />
               {form.confirmPassword && form.confirmPassword === form.password && (
                 <p className="text-blue-500 flex items-center gap-1" style={{ fontSize: "0.75rem" }}>
                   <CheckCircle2 className="h-3 w-3" />
@@ -281,6 +220,8 @@ export function Register() {
               </Link>
               .
             </p>
+
+            <AuthFieldError message={error} />
 
             <button
               type="submit"

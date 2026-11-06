@@ -40,3 +40,20 @@
 .workspace-root .module-metric:hover{border-color:#bbd6fa;box-shadow:0 8px 24px #007aff08}
 
 .history-result-count{margin:0 0 0 auto;font-size:12px;white-space:nowrap}.history-filters{row-gap:10px}
+
+.workspace-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #85858f;
+  font-size: 14px;
+  text-align: center;
+}

@@ -75,13 +75,18 @@ http.interceptors.response.use(
   async (error: AxiosError<ApiResponse<unknown>>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const path = originalRequest?.url?.split("?")[0] ?? "";
+    if (/^\/api\/auth\/(?:login|register|recovery\/(?:request|verify|reset))$/.test(path)) {
+      return Promise.reject(buildApiError(error));
+    }
+
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       const refreshToken = getRefreshToken();
       const accessToken = getAccessToken();
 
       if (!refreshToken || !accessToken) {
         clearTokens();
-        window.location.href = "/login";
+        window.location.href = "/acceso";
         return Promise.reject(buildApiError(error));
       }
 
@@ -118,7 +123,7 @@ http.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         clearTokens();
-        window.location.href = "/login";
+        window.location.href = "/acceso";
         return Promise.reject(buildApiError(error));
       } finally {
         isRefreshing = false;
@@ -126,7 +131,7 @@ http.interceptors.response.use(
     }
 
     if (error.response?.status === 403) {
-      window.location.href = "/dashboard";
+      window.location.href = "/panel";
     }
 
     return Promise.reject(buildApiError(error));
@@ -135,20 +140,22 @@ http.interceptors.response.use(
 
 function buildApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
   const response = error.response;
-  if (response?.data) {
-    const body = response.data;
-    return {
-      message: body.message ?? error.message,
-      code: body.code ?? null,
-      errors: body.errors ?? null,
-      status: response.status,
-    };
-  }
+  const body = response?.data;
+  const status = response?.status ?? 0;
+  const messages: Record<number, string> = {
+    0: "No se pudo conectar con PharmaCast. Verifica tu conexión.",
+    400: "Revisa los datos ingresados e intenta de nuevo.",
+    401: "No se pudo validar tu acceso.",
+    403: "No tienes permiso para realizar esta acción.",
+    404: "La función solicitada no está disponible.",
+    429: "Demasiados intentos. Espera un momento y vuelve a intentarlo.",
+    503: "El servicio no está disponible por el momento.",
+  };
   return {
-    message: error.message || "Error de red. Verifica tu conexión.",
-    code: null,
-    errors: null,
-    status: response?.status ?? 0,
+    message: body?.message || messages[status] || "No se pudo completar la solicitud. Intenta de nuevo.",
+    code: body?.code ?? null,
+    errors: body?.errors ?? null,
+    status,
   };
 }
 

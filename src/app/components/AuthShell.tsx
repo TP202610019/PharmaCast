@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from "motion/react";
 import { Navbar } from "./Navbar";
 import { Link } from "react-router";
 import { ArrowUpRight } from "lucide-react";
@@ -5,10 +6,11 @@ import type { ReactNode } from "react";
 import "../../styles/chrome.css";
 import "../../styles/auth.css";
 export function AuthShell({ children, mode }: { children: ReactNode; mode: "login" | "register" | "recovery" }) {
+ const reducedMotion = useReducedMotion();
  const register = mode === "register";
  return <div className={`auth-page auth-${mode}`}><main className="auth-main">
   <Navbar plain backLink={{to:mode==='recovery'?'/acceso':'/',label:mode==='recovery'?'Volver al login':'Volver al inicio'}} />
-  <section className="auth-stage"><div className="auth-context"><h2>{register?<>Anticipa la demanda<br/>de tu farmacia para<br/><span>comprar mejor</span></>:mode==='recovery'?<>Recupera el acceso<br/><span>a tu farmacia</span></>:<>Bienvenido<br/><span>de vuelta</span></>}</h2>{register?<><p>Convierte tus ventas en un pronóstico de demanda y un plan de compras.</p><AuthForecast /><div className="auth-result-stats"><div><strong>&lt; 2 min</strong><span>Tiempo de análisis</span></div><div><strong>&gt; 80 %</strong><span>Precisión del pronóstico</span></div></div></>:<p>{mode==='recovery'?'Verifica tu correo y establece una nueva contraseña.':'Retoma tus análisis y revisa tus próximos planes de compra.'}</p>}</div><div className="auth-form-wrap">{children}</div></section>
+  <motion.section key={mode} className="auth-stage" initial={reducedMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.3, ease: "easeOut" }}><div className="auth-context"><h2>{register?<>Anticipa la demanda<br/>de tu farmacia para<br/><span>comprar mejor</span></>:mode==='recovery'?<>Recupera el acceso<br/><span>a tu farmacia</span></>:<>Bienvenido<br/><span>de vuelta</span></>}</h2>{register?<><p>Convierte tus ventas en un pronóstico de demanda y un plan de compras.</p><AuthForecast /><div className="auth-result-stats"><div><strong>&lt; 2 min</strong><span>Tiempo de análisis</span></div><div><strong>&gt; 80 %</strong><span>Precisión del pronóstico</span></div></div></>:<p>{mode==='recovery'?'Verifica tu correo y establece una nueva contraseña.':'Retoma tus análisis y revisa tus próximos planes de compra.'}</p>}</div><div className="auth-form-wrap">{children}</div></motion.section>
   <footer className="auth-bottom"><span>© 2026 PharmaCast</span><Link to={`/terminos?from=${register?'register':'login'}`}>Términos y condiciones <ArrowUpRight size={11}/></Link></footer>
  </main></div>;
 }

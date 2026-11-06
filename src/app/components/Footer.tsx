@@ -21,7 +21,12 @@ export function Footer({ workspace = false }: { workspace?: boolean } = {}) {
         <nav aria-label="Tu espacio"><h2>Tu espacio</h2><Link to="/panel">Mi panel</Link><Link to="/predicciones/nueva">Nueva predicción</Link><Link to="/historial">Historial de predicciones</Link></nav>
         <nav aria-label="Legal"><h2>Legal</h2><Link to="/terminos?from=workspace" state={{ smoothScrollToTop: true }}>Términos y condiciones</Link></nav>
       </> : <>
-      <nav aria-label="Producto"><h2>Producto</h2><Link to="/#producto" onClick={event => repeatSectionScroll(event, "#producto")}>Conoce PharmaCast</Link><Link to="/#datos" onClick={event => repeatSectionScroll(event, "#datos")}>Carga de datos</Link><Link to="/#procesamiento" onClick={event => repeatSectionScroll(event, "#procesamiento")}>Procesamiento</Link><Link to="/#compras" onClick={event => repeatSectionScroll(event, "#compras")}>Plan de compras</Link><Link to="/#precision" onClick={event => repeatSectionScroll(event, "#precision")}>Precisión del análisis</Link></nav>
+      <nav aria-label="Beneficios">
+        <h2>Beneficios</h2>
+        <Link to="/#beneficios" onClick={event => repeatSectionScroll(event, "#beneficios")}>Conoce PharmaCast</Link>
+        <Link to="/#recorrido" onClick={event => repeatSectionScroll(event, "#recorrido")}>Cómo funciona</Link>
+        <Link to="/#preguntas" onClick={event => repeatSectionScroll(event, "#preguntas")}>Preguntas frecuentes</Link>
+      </nav>
       <nav aria-label="Tu cuenta"><h2>Tu cuenta</h2>{isLoggedIn ? <><Link to="/panel">Mi panel</Link><Link to="/predicciones/nueva">Nueva predicción</Link><Link to="/historial">Historial</Link></> : <><Link to="/registro" state={{ smoothScrollToTop: true }}>Crear una cuenta <ArrowUpRight size={12}/></Link><Link to="/acceso" state={{ smoothScrollToTop: true }}>Iniciar sesión</Link></>}</nav>
       <nav aria-label="Legal"><h2>Legal</h2><Link to="/terminos" state={{ smoothScrollToTop: true }}>Términos y condiciones</Link></nav>
       </>}

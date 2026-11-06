@@ -1,3 +1,4 @@
+import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -103,18 +104,7 @@ export function History() {
       r.status === ExecutionStatus.Processing
   ).length;
 
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>
-            Cargando historial...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <WorkspaceLoading label="Cargando historial…" />;
 
   if (error) {
     return (

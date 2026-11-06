@@ -72,3 +72,47 @@
 #root .ph-home .ph-final-band {
   padding-top:calc(10px + var(--ph-section-gap));
 }
+
+/* The walkthrough is one continuous section, including its introduction. */
+.ph-home .ph-overview-band,
+.ph-home .ph-questions-band { background:#fff; }
+.ph-home .ph-story-intro {
+  box-shadow:0 0 0 100vmax #f5f5f7;
+  clip-path:inset(0 -100vmax);
+}
+.ph-home .ph-story-intro,
+.ph-home .ph-story-flow,
+.ph-home .ps-input-band,
+.ph-home .ps-processing-band,
+.ph-home .ps-results-band { background:#f5f5f7; }
+.ph-home .ph-story-intro,
+.ph-home .ps-input-band .ps-processing,
+.ph-home .ps-results-band,
+.ph-home .ps-results-band .ps-validation,
+.ph-home .ps-results-band .ps-purchase { border-block:0; }
+.ph-home .ps-results-band::before { content:none; }
+
+/* Account for the global navbar offset without stacking section offsets. */
+.ph-home #beneficios,
+.ph-home #datos,
+.ph-home #procesamiento,
+.ph-home #precision,
+.ph-home #compras,
+.ph-home #preguntas {
+  scroll-margin-top: -26px;
+}
+
+.ph-home #proceso {
+  scroll-margin-top: -4px;
+}
+
+@media (max-width: 767px) {
+  .ph-home #beneficios,
+  .ph-home #datos,
+  .ph-home #procesamiento,
+  .ph-home #precision,
+  .ph-home #compras,
+  .ph-home #preguntas {
+    scroll-margin-top: 6px;
+  }
+}

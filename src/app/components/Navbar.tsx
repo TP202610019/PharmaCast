@@ -8,7 +8,7 @@ import "../../styles/chrome.css";
 import { PharmaCastLogo } from "./PharmaCastLogo";
 
 const publicLinks = [
-  { label: "Producto", path: "/#producto" },
+  { label: "Beneficios", path: "/#beneficios" },
   { label: "Cómo funciona", path: "/#recorrido" },
   { label: "Preguntas frecuentes", path: "/#preguntas" },
 ];
@@ -182,7 +182,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                             style={{ fontSize: "0.875rem" }}
                           >
                             <Settings className="h-4 w-4 text-gray-400" />
-                            Configuración
+                            Mi cuenta
                           </button>
                           <button
                             onClick={() => { setShowDropdown(false); setShowLogoutModal(true); }}
@@ -268,7 +268,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                       style={{ fontSize: "0.875rem" }}
                     >
                       <Settings className="h-4 w-4" />
-                      Configuración
+                      Mi cuenta
                     </button>
                     <button
                       onClick={() => { setMobileOpen(false); setShowLogoutModal(true); }}
