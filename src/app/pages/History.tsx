@@ -1,3 +1,4 @@
+import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
@@ -106,33 +107,7 @@ export function History() {
 
   if (loading) return <WorkspaceLoading label="Cargando historial…" />;
 
-  if (error) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 border border-red-100">
-            <AlertCircle className="h-7 w-7 text-red-400" />
-          </div>
-          <div>
-            <p className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>
-              Error al cargar historial
-            </p>
-            <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>
-              {error}
-            </p>
-          </div>
-          <button
-            onClick={loadHistory}
-            className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white hover:bg-blue-400 transition-colors"
-            style={{ fontSize: "0.875rem", fontWeight: 600 }}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (error) return <WorkspaceError title="Error al cargar el historial" message={error} onRetry={loadHistory} />;
 
   return (
     <div className="history-page workspace-page">

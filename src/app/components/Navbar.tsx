@@ -326,7 +326,9 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                   ¿Cerrar sesión?
                 </h2>
                 <p className="text-gray-500 mb-7" style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>
-                  Se cerrará tu sesión activa y serás redirigido al inicio de sesión.
+                  {location.pathname === "/predicciones/nueva"
+                    ? "Se cerrará la predicción en curso. Los análisis completados seguirán disponibles en el historial."
+                    : "Se cerrará tu sesión activa y volverás al inicio de sesión."}
                 </p>
                 <div className="flex flex-col gap-3">
                   <button

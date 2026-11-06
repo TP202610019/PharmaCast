@@ -1,3 +1,4 @@
+import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
 import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
@@ -42,7 +43,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (!filtered.length) return null;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>{payload?.[0]?.payload?.date ?? label}</p>
+      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>{payload?.[0]?.payload?.weekRange ?? payload?.[0]?.payload?.date ?? label}</p>
       {filtered.map((p: any) => (
         <div key={p.name} className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
@@ -236,21 +237,7 @@ export function Dashboard() {
   // ── Loading / Error states ──
   if (loading) return <WorkspaceLoading label="Cargando panel…" />;
 
-  if (error) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-          <AlertTriangle className="h-10 w-10 text-orange-400" />
-          <p className="text-gray-700" style={{ fontWeight: 600 }}>{error}</p>
-          <button onClick={loadData}
-            className="rounded-xl bg-blue-500 px-5 py-2.5 text-white hover:bg-blue-400 transition-all"
-            style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (error) return <WorkspaceError title="Error al cargar el panel" message={error} onRetry={loadData} />;
 
   const hasPrediction = !!summary?.latestPredictionId;
 
@@ -507,7 +494,7 @@ export function Dashboard() {
                                 </linearGradient>
                               </defs>
                               <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                              <XAxis dataKey="plotIndex" tickFormatter={(index) => chartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                              <XAxis dataKey="plotIndex" tickFormatter={(index) => chartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={32} interval="preserveStartEnd" dy={8} />
                               <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
                               <ReferenceLine x={chartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />

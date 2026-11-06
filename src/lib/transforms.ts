@@ -12,6 +12,7 @@ import { ExecutionStatus } from "../types/api";
 
 export interface ChartPoint {
   date: string;
+  weekRange?: string;
   historical: number | null;
   predicted: number | null;
   upper: number | null;
@@ -171,7 +172,25 @@ export function buildChartFromBackendPoints(
     point.upper = p.upper ?? p.predicted * 1.11;
     point.lower = p.lower ?? Math.max(0, p.predicted * 0.89);
   }
-  return [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, point]) => point);
+  const weeks = new Map<string, ChartPoint>();
+  for (const [day, point] of [...days.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const date = new Date(day + "T00:00:00Z");
+    date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+    const key = date.toISOString().slice(0, 10);
+    const end = new Date(date);
+    end.setUTCDate(end.getUTCDate() + 6);
+    const format = (value: Date) => value.toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" });
+    if (!weeks.has(key)) weeks.set(key, {
+      date: `${format(date)}–${format(end)}`,
+      weekRange: `Semana del ${format(date)} al ${format(end)} · total semanal`,
+      historical: null, predicted: null, upper: null, lower: null,
+    });
+    const week = weeks.get(key)!;
+    for (const field of ["historical", "predicted", "upper", "lower"] as const) {
+      if (point[field] != null) week[field] = (week[field] ?? 0) + point[field]!;
+    }
+  }
+  return [...weeks.values()];
 }
 
 

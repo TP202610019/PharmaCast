@@ -1,10 +1,13 @@
+import { WorkspaceLoading } from "../components/WorkspaceLoading";
+import { Switch } from "../components/ui/switch";
+import { useAuth } from "../context/AuthContext";
 import { exportPurchase, priorityRank } from "../../lib/purchaseExport";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
-import { Switch } from "../components/ui/switch";
-import { usePredictionDraft } from "../hooks/usePredictionDraft";
+import { clearPredictionDraft, usePredictionDraft } from "../hooks/usePredictionDraft";
 import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useBlocker, useNavigate } from "react-router";
+import { createPortal } from "react-dom";
 import {
   Upload,
   Settings,
@@ -182,7 +185,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     if (!filtered.length) return null;
     return (
       <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-        <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.date ?? label}</p>
+        <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.weekRange ?? payload?.[0]?.payload?.date ?? label}</p>
         {filtered.map((p: any) => (
           <div key={p.name} className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1.5">
@@ -253,16 +256,22 @@ function Paginator({ page, total, pageSize, onChange }: { page: number; total: n
 /* ── Main Component ── */
 export function PredictionFlow() {
   const navigate = useNavigate();
+  const { isLoggedIn, user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const salesInputRef = useRef<HTMLInputElement>(null);
   const inventoryInputRef = useRef<HTMLInputElement>(null);
 
   /* ── Step / UI state ── */
   const [currentStep, setCurrentStep] = usePredictionDraft("currentStep", 1);
+  const previousStep = useRef(currentStep);
+  useEffect(() => {
+    if (previousStep.current === currentStep) return;
+    previousStep.current = currentStep;
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [currentStep]);
   const [files, setFiles] = usePredictionDraft<UploadedFile[]>("files", []);
   const [isDragOver, setIsDragOver] = useState(false);
   const [forecastDays, setForecastDays] = usePredictionDraft("forecastDays", 30);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisSeconds, setAnalysisSeconds] = useState(0);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   useEffect(() => {
@@ -313,6 +322,39 @@ export function PredictionFlow() {
   const [analysisError, setAnalysisError] = useState<string>("");
   const [savingPlan, setSavingPlan] = useState(false);
 
+  const finishing = useRef(false);
+  useEffect(() => {
+    finishing.current = false;
+    return () => { finishing.current = true; };
+  }, []);
+  const hasDraft = files.length > 0 || currentStep > 1;
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    isLoggedIn && !finishing.current && hasDraft && currentLocation.pathname !== nextLocation.pathname
+  );
+  const [restoreError, setRestoreError] = useState("");
+  const [restoringPrediction, setRestoringPrediction] = useState(currentStep >= 3 && !prediction);
+  useEffect(() => {
+    if (currentStep < 3 || prediction || analysisStatus === "running") return;
+    let active = true;
+    const saved = sessionStorage.getItem(`prediction-draft:${user?.email ?? "guest"}:prediction`);
+    let id: string | undefined;
+    try { id = JSON.parse(saved ?? "null")?.id; } catch {}
+    if (!id) {
+      setCurrentStep(2);
+      setRestoringPrediction(false);
+      return;
+    }
+    setRestoringPrediction(true);
+    predictionService.getById(id).then((result) => {
+      if (active) { setPrediction(result); if (currentStep === 3) setAnalysisStatus("done"); }
+    }).catch(() => {
+      if (active) setRestoreError("No se pudieron recuperar los resultados. Recarga para volver a intentarlo.");
+    }).finally(() => {
+      if (active) setRestoringPrediction(false);
+    });
+    return () => { active = false; };
+  }, [currentStep, prediction, user?.email]);
+
   /* ── Derived product list ── */
   const products = useMemo<UIProduct[]>(() => {
     if (prediction) {
@@ -338,14 +380,6 @@ export function PredictionFlow() {
     }
   }, [products, selectedProductId]);
 
-  /* ── Auto-advance to step 4 after analysis completes ── */
-  useEffect(() => {
-    if (currentStep === 3 && analysisStatus === "done") {
-      const timer = setTimeout(() => setCurrentStep(4), 4500);
-      return () => clearTimeout(timer);
-    }
-  }, [currentStep, analysisStatus]);
-
   /* ── Purchase plan generation is intentionally skipped in forecast-only mode ──
    * No inventory data exists yet (sales dataset only), so POST /api/purchase-plans
    * must not be called automatically. Step 5 derives its table from forecastResults
@@ -369,6 +403,31 @@ export function PredictionFlow() {
         .finally(() => setSavedMappingsLoading(false));
     }
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const defaultAppliedFor = useRef<string | null>(null);
+  const [mappingWarning, setMappingWarning] = useState("");
+  const applySavedMapping = (config: import("../../types/api").MappingConfigResponse) => {
+    const mapping: Record<string, string> = {};
+    const missing: string[] = [];
+    config.fields.forEach((field) => {
+      if (detectedSalesCols.includes(field.datasetColumnName)) mapping[field.fieldKey] = field.datasetColumnName;
+      else missing.push(field.datasetColumnName);
+    });
+    setAppliedMappingId(config.id);
+    setSalesMapping(mapping);
+    setMappingWarning(missing.length
+      ? "Algunas columnas de esta configuración no están en el archivo. Revisa los campos sin asignar."
+      : "");
+  };
+
+  useEffect(() => {
+    if (currentStep !== 2 || savedMappingsLoading || !savedMappings.length || !primaryDatasetId || !detectedSalesCols.length ||
+        defaultAppliedFor.current === primaryDatasetId) return;
+    defaultAppliedFor.current = primaryDatasetId;
+    if (appliedMappingId || Object.keys(salesMapping).length > 0) return;
+    const config = savedMappings.find((mapping) => mapping.isDefault);
+    if (config) applySavedMapping(config);
+  }, [currentStep, savedMappingsLoading, savedMappings, primaryDatasetId, detectedSalesCols, appliedMappingId, salesMapping]);
 
   /* ── File upload handler ── */
   const uploadFile = useCallback(
@@ -511,7 +570,6 @@ export function PredictionFlow() {
   /* ── Run analysis ── */
   const runAnalysis = useCallback(async () => {
     setAnalysisStatus("running");
-    setAnalysisProgress(0);
     setAnalysisSeconds(0);
     setCompletedStepIdx(-1);
     setAnalysisError("");
@@ -520,14 +578,19 @@ export function PredictionFlow() {
 
     if (primaryDatasetId) {
       // Real API mode — animate steps gradually while waiting
-      let animIdx = 0;
-      const animInterval = setInterval(() => {
-        if (animIdx < total - 1) {
-          setCompletedStepIdx(animIdx - 1);
-          setAnalysisProgress(Math.round(((animIdx + 1) / total) * 88));
-          animIdx++;
+      const stageDurations = [1000, 1800, 2200, 4000];
+      const started = performance.now();
+      let visualStage = 0;
+      const animInterval = window.setInterval(() => {
+        let elapsed = performance.now() - started;
+        let stage = 0;
+        while (stage < stageDurations.length && elapsed >= stageDurations[stage]) {
+          elapsed -= stageDurations[stage];
+          stage++;
         }
-      }, 1200);
+        visualStage = stage;
+        setCompletedStepIdx(stage - 1);
+      }, 150);
 
       try {
         // Resolve or create mapping config before triggering prediction
@@ -578,23 +641,29 @@ export function PredictionFlow() {
 
         clearInterval(animInterval);
 
+        if (finishing.current) return;
         if (result.executionStatus === ExecutionStatus.Failed) {
           setAnalysisError(result.errorMessage ?? "La predicción falló. Verifica tu archivo e intenta de nuevo.");
           setAnalysisStatus("error");
           return;
         }
 
+        sessionStorage.setItem(`prediction-draft:${user?.email ?? "guest"}:prediction`, JSON.stringify({ id: result.id }));
         setPrediction(result);
-        // Present the confirmed completed stages before the result summary.
-        for (let stage = Math.max(0, animIdx - 1); stage < total; stage++) {
+        // Confirm remaining stages briefly, then reserve the last 6% for the purchase plan.
+        for (let stage = visualStage; stage < 4; stage++) {
           setCompletedStepIdx(stage);
-          setAnalysisProgress(Math.round(((stage + 1) / total) * 100));
-          await new Promise(resolve => window.setTimeout(resolve, 350));
+          await new Promise(resolve => window.setTimeout(resolve, 300));
         }
+        setCompletedStepIdx(3);
+        await new Promise(resolve => window.setTimeout(resolve, 700));
+        setCompletedStepIdx(4);
+        await new Promise(resolve => window.setTimeout(resolve, 5000));
+        setCompletedStepIdx(total - 1);
         setAnalysisStatus("done");
       } catch (err) {
         clearInterval(animInterval);
-        setAnalysisError(extractApiErrorMessage(err, "Error al ejecutar la predicción."));
+        setAnalysisError("No se pudo completar el análisis. Revisa las columnas asignadas y vuelve a intentarlo.");
         setAnalysisStatus("error");
       }
     } else {
@@ -603,17 +672,17 @@ export function PredictionFlow() {
       const interval = setInterval(() => {
         if (idx < total) {
           setCompletedStepIdx(idx - 1);
-          setAnalysisProgress(Math.round(((idx + 1) / total) * 100));
+
           idx++;
         } else {
           clearInterval(interval);
           setCompletedStepIdx(total - 1);
-          setAnalysisProgress(100);
+
           setAnalysisStatus("done");
         }
       }, 680);
     }
-  }, [primaryDatasetId, forecastDays, files, salesMapping, appliedMappingId, mappingName, saveAsDefault, fieldCatalog]);
+  }, [primaryDatasetId, forecastDays, files, salesMapping, appliedMappingId, mappingName, saveAsDefault, fieldCatalog, user?.email]);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -622,6 +691,7 @@ export function PredictionFlow() {
   };
 
   const canProceed = () => {
+    if (currentStep === 3) return analysisStatus === "done";
     if (currentStep === 1) return files.length >= 1 && !files.some((f) => f.uploading);
     if (currentStep === 2) {
       const hasSales = files.some((f) => f.type === "sales");
@@ -689,8 +759,7 @@ export function PredictionFlow() {
   const sidebarProducts = useMemo(() =>
     products.filter((p) =>
       sidebarSearch === "" ||
-      p.name.toLowerCase().includes(sidebarSearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(sidebarSearch.toLowerCase())
+      p.name.toLowerCase().includes(sidebarSearch.toLowerCase())
     ),
     [products, sidebarSearch]
   );
@@ -728,8 +797,26 @@ export function PredictionFlow() {
     planTablePage * PAGE_SIZE_PLAN
   );
 
+  if (restoringPrediction) return <WorkspaceLoading label="Recuperando resultados…" />;
+  if (restoreError) return <div role="alert" className="mx-auto max-w-xl px-6 py-16 text-center text-sm text-red-600">{restoreError}</div>;
+
   return (
     <div className="prediction-page">
+      {blocker.state === "blocked" && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-5">
+          <div role="dialog" aria-modal="true" aria-labelledby="leave-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 id="leave-title" className="text-lg font-semibold">¿Salir de la predicción?</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-500">{prediction
+              ? "El análisis ya está guardado en el historial. Al salir se cerrará este recorrido."
+              : "Tienes una predicción en curso. Al salir se borrará la configuración de este recorrido."}</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button autoFocus onClick={() => blocker.reset()} className="rounded-full border border-gray-300 px-4 py-2 text-sm">Continuar aquí</button>
+              <button onClick={() => { finishing.current = true; clearPredictionDraft(); blocker.proceed(); }} className="rounded-full bg-blue-500 px-4 py-2 text-sm text-white">Salir</button>
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
       <header className="prediction-heading">
         <div><h1>Nueva predicción</h1><p>De tus ventas a tu próximo plan de compras.</p></div>
         <span className="prediction-current"><span>{String(currentStep).padStart(2,"0")}</span> / 05</span>
@@ -975,12 +1062,12 @@ export function PredictionFlow() {
                         <Select value={appliedMappingId ?? "new"} onValueChange={(value) => {
                             const id = value === "new" ? "" : value;
                             setAppliedMappingId(id || null);
+                            setMappingWarning("");
+                            if (!id) setSalesMapping({});
                             if (id) {
                               const cfg = savedMappings.find((m) => m.id === id);
                               if (cfg) {
-                                const newMapping: Record<string, string> = {};
-                                cfg.fields.forEach((f) => { newMapping[f.fieldKey] = f.datasetColumnName; });
-                                setSalesMapping(newMapping);
+                                applySavedMapping(cfg);
                               }
                             }
                           }}>
@@ -992,7 +1079,7 @@ export function PredictionFlow() {
                         </Select>
                         {appliedMappingId && (
                           <button
-                            onClick={() => { setAppliedMappingId(null); setSalesMapping({}); }}
+                            onClick={() => { setAppliedMappingId(null); setSalesMapping({}); setMappingWarning(""); }}
                             className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 hover:text-red-500 hover:border-red-200 transition-all"
                             style={{ fontSize: "0.75rem" }}
                           >
@@ -1019,12 +1106,8 @@ export function PredictionFlow() {
                           style={{ fontSize: "0.8125rem", minWidth: 240 }}
                         />
                         <div className="prediction-default-option">
-                          <Switch
-                            id="mapping-save-default"
-                            checked={saveAsDefault}
-                            onCheckedChange={setSaveAsDefault}
-                            className="prediction-default-switch"
-                          />
+                          <Switch id="mapping-save-default" checked={saveAsDefault}
+                            onCheckedChange={setSaveAsDefault} className="prediction-default-switch" />
                           <label htmlFor="mapping-save-default" className="text-gray-600 cursor-pointer select-none">
                             Guardar como predeterminada
                           </label>
@@ -1032,6 +1115,8 @@ export function PredictionFlow() {
                       </div>
                     )}
                   </div>
+
+                  {mappingWarning && <p role="status" className="px-6 pt-2 text-xs text-orange-600">{mappingWarning}</p>}
 
                   <div className="px-6 pt-4">
                     <div className="prediction-source-tabs flex gap-1 p-1 w-fit">
@@ -1102,11 +1187,6 @@ export function PredictionFlow() {
                               const isMapped = !!val;
                               return (
                                 <div key={v.key} className={`prediction-mapping-row flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-blue-500/25 bg-blue-500/5" : "border-gray-200 bg-white"}`}>
-                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${isMapped ? "border-blue-500 bg-blue-500" : "border-gray-300 bg-white"}`}>
-                                    {isMapped
-                                      ? <CheckCircle className="h-3.5 w-3.5 text-white" />
-                                      : <span className="text-red-400" style={{ fontSize: "0.6875rem", fontWeight: 700 }}>!</span>}
-                                  </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
                                       {v.label} <span className="text-red-400">*</span>
@@ -1140,11 +1220,6 @@ export function PredictionFlow() {
                               const isMapped = !!val;
                               return (
                                 <div key={v.key} className={`prediction-mapping-row flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-blue-500/20 bg-blue-500/[0.03]" : "border-gray-100 bg-gray-50/60"}`}>
-                                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${isMapped ? "border-blue-500 bg-blue-500" : "border-gray-200 bg-white"}`}>
-                                    {isMapped
-                                      ? <CheckCircle className="h-3.5 w-3.5 text-white" />
-                                      : <span className="text-gray-300" style={{ fontSize: "0.6875rem", fontWeight: 700 }}>—</span>}
-                                  </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-gray-600" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{v.label}</p>
                                     <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
@@ -1220,27 +1295,12 @@ export function PredictionFlow() {
                 {analysisStatus === "running" && (
                   <div className="p-6">
                     <div className="flex items-start gap-3 mb-3">
-                      <div className="relative shrink-0">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
-                          <Activity style={{ height: 18, width: 18 }} className="text-blue-500" />
-                        </div>
-                        <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-60" />
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
-                        </span>
-                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1.5">
                           <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "0.875rem" }}>Procesamiento del análisis</p>
-                          <span className="text-blue-500 shrink-0" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{analysisProgress >= 73 && primaryDatasetId ? "Esperando resultados" : `${analysisProgress}%`}</span>
                         </div>
-                        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                          <motion.div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400"
-                            initial={{ width: "0%" }}
-                            animate={{ width: `${analysisProgress}%` }}
-                            transition={{ duration: 0.6, ease: "easeOut" }}
-                          />
+                        <div role="progressbar" aria-label="Análisis en curso" className="analysis-indeterminate-track">
+                          <span />
                         </div>
                         <div className="analysis-progress-details">
                           <p className="text-gray-400">
@@ -1253,70 +1313,20 @@ export function PredictionFlow() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="analysis-pipeline-grid">
                       {PIPELINE_STEPS.map((step, i) => {
                         const isDone = i <= completedStepIdx;
                         const isActive = i === completedStepIdx + 1;
-                        const StepIcon = step.icon;
                         return (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 0.3, delay: i * 0.05 }}
-                            className="analysis-pipeline-row flex items-start gap-2"
-                          >
-                            <div className={`flex h-7 w-7 shrink-0 mt-0.5 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                              isDone ? "bg-blue-500 border-blue-500"
-                              : isActive ? "bg-transparent border-blue-500"
-                              : "bg-white border-gray-200"
-                            }`}>
-                              {isDone ? (
-                                <CheckCircle className="h-3.5 w-3.5 text-white" />
-                              ) : isActive ? (
-                                <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                                  className="h-3 w-3 rounded-full border-2 border-blue-500 border-t-transparent"
-                                />
-                              ) : (
-                                <span style={{ fontSize: "0.625rem", fontWeight: 600, color: "#d1d5db" }}>{i + 1}</span>
-                              )}
-                            </div>
-                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${
-                              isDone ? "bg-blue-500/15 border border-blue-500/25"
-                              : isActive ? "bg-blue-500/10 border border-blue-500/20"
-                              : "bg-white border border-gray-200"
-                            }`}>
-                              <StepIcon className={`h-3.5 w-3.5 transition-colors duration-300 ${isDone || isActive ? "text-blue-500" : "text-gray-300"}`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="transition-colors duration-300" style={{
-                                  fontSize: "0.8125rem",
-                                  fontWeight: 600,
-                                  color: isDone ? "#0066d6" : isActive ? "#111827" : "#9ca3af",
-                                }}>
-                                  {step.label}
-                                </span>
-                                  <motion.span
-                                    initial={false}
-                                    animate={{ opacity: isActive ? 1 : 0 }}
-                                    aria-hidden={!isActive}
-                                    className="whitespace-nowrap rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-px text-blue-600"
-                                    style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}
-                                  >
-                                    En curso
-                                  </motion.span>
-                              </div>
-                              <p className="mt-0.5 transition-colors duration-300" style={{
-                                fontSize: "0.6875rem",
-                                color: isDone ? "#6b7280" : isActive ? "#6b7280" : "#d1d5db",
-                              }}>
-                                {step.description}
-                              </p>
-                            </div>
-                          </motion.div>
+                          <div key={step.label} className={`analysis-stage-item ${isActive ? "is-active" : ""} ${isDone ? "is-done" : ""}`}>
+                            <span className="analysis-stage-indicator">
+                              {isDone ? <CheckCircle size={16} /> : isActive
+                                ? <i className="analysis-stage-spinner" aria-hidden="true" />
+                                : String(i + 1).padStart(2, "0")}
+                            </span>
+                            <span className="analysis-stage-name">{step.label}</span>
+                            {isActive && <span className="analysis-stage-status">En curso</span>}
+                          </div>
                         );
                       })}
                     </div>
@@ -1330,76 +1340,19 @@ export function PredictionFlow() {
                       animate={{ opacity: 1, y: 0 }}
                       className="analysis-complete-heading flex items-center gap-3 mb-5"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 border border-blue-500/25">
-                        <CheckCircle className="h-5 w-5 text-blue-500" />
-                      </div>
                       <div className="flex-1">
-                        <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 700 }}>¡Análisis completado con éxito!</p>
-                        <p className="text-gray-500" style={{ fontSize: "0.75rem" }}>Redirigiendo a resultados en unos segundos...</p>
-                      </div>
-                      <div className="shrink-0 flex flex-col items-end gap-1.5">
-                        <span className="text-gray-400" style={{ fontSize: "0.6875rem" }}>Redirigiendo</span>
-                        <div className="h-1 w-24 rounded-full bg-gray-100 overflow-hidden">
-                          <motion.div className="h-full rounded-full bg-blue-500"
-                            initial={{ width: "0%" }}
-                            animate={{ width: "100%" }}
-                            transition={{ duration: 4.3, ease: "linear" }} />
-                        </div>
+                        <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 700 }}>Análisis completado</p>
+                        <p className="text-gray-500" style={{ fontSize: "0.75rem" }}>Tus resultados están listos.</p>
                       </div>
                     </motion.div>
 
-                    <p className="text-gray-400 mb-4" style={{ fontSize: "0.75rem" }}>
-                      Métricas del modelo{recordCount > 0 && ` · ${recordCount.toLocaleString()} registros procesados`}
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {[
-                        {
-                          label: "Precisión estimada",
-                          value: accuracy != null ? `${accuracy}%` : "—",
-                          sub: accuracy === 0 ? "Error de volumen igual o superior al 100 %" : undefined,
-                          icon: TrendingUp,
-                          iconBg: "bg-blue-500/10 border-blue-500/20",
-                          iconColor: "text-blue-500",
-                          valColor: "#0066d6",
-                        },
-                        {
-                          label: "Productos analizados",
-                          value: prediction ? `${products.length}` : "—",
-                          sub: "En el dataset",
-                          icon: Package,
-                          iconBg: "bg-blue-500/10 border-blue-500/20",
-                          iconColor: "text-blue-500",
-                          valColor: "#1d4ed8",
-                        },
-                        {
-                          label: "Período predicho",
-                          value: `${forecastDays} días`,
-                          sub: "Horizonte de análisis",
-                          icon: Activity,
-                          iconBg: "bg-blue-500/10 border-blue-500/20",
-                          iconColor: "text-blue-500",
-                          valColor: "#007AFF",
-                        },
-                      ].map((m, idx) => {
-                        const MIcon = m.icon;
-                        return (
-                          <motion.div key={m.label}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.35, delay: idx * 0.08 }}
-                            className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${m.iconBg}`}>
-                              <MIcon className={`h-3.5 w-3.5 ${m.iconColor}`} />
-                            </div>
-                            <div>
-                              <p style={{ fontSize: "1.375rem", fontWeight: 700, color: m.valColor, lineHeight: 1.1 }}>{m.value}</p>
-                              <p className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{m.label}</p>
-                              <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{m.sub}</p>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
+                    <AnalysisMetrics items={[
+                      { label: "Precisión", icon: BarChart3, value: accuracy != null ? `${accuracy}%` : "—" },
+                      { label: "Productos analizados", icon: Package, value: products.length.toLocaleString("es-PE") },
+                      { label: "Horizonte", icon: Calendar, value: `${forecastDays} días` },
+                    ]} />
+
+
                   </div>
                 )}
               </div>
@@ -1435,7 +1388,7 @@ export function PredictionFlow() {
                         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
                           <div>
                             <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>Medicamentos</p>
-                            <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>{sidebarProducts.length} de {products.length}</p>
+
                           </div>
                           <button aria-label="Cerrar lista de medicamentos" onClick={() => setSidebarOpen(false)}
                             className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
@@ -1451,7 +1404,7 @@ export function PredictionFlow() {
                               style={{ fontSize: "0.8125rem" }} autoFocus />
                           </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto py-2">
+                        <div className="medication-list-scroll flex-1 overflow-y-auto py-2">
                           {sidebarProducts.length === 0 ? (
                             <div className="flex flex-col items-center gap-2 py-10 px-4 text-center">
                               <Search className="h-6 w-6 text-gray-300" />
@@ -1460,17 +1413,14 @@ export function PredictionFlow() {
                           ) : (
                             sidebarProducts.map((p) => {
                               const isSelected = p.id === selectedProductId;
-                              const pConf = priorityConfig[p.priority];
+
                               return (
                                 <button key={p.id} onClick={() => { setSelectedProductId(p.id); setSidebarOpen(false); }}
                                   className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-blue-500/5 border-r-2 border-r-blue-500" : ""}`}>
-                                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${pConf.bg}`}>
-                                    <span className={`h-2 w-2 rounded-full ${pConf.dot}`} />
-                                  </div>
                                   <div className="flex-1 min-w-0">
                                     <p className={`truncate ${isSelected ? "text-blue-600" : "text-gray-900"}`}
                                       style={{ fontSize: "0.8125rem", fontWeight: isSelected ? 600 : 500 }}>{p.name}</p>
-                                    <p className="text-gray-400 truncate" style={{ fontSize: "0.6875rem" }}>{p.category}</p>
+
                                   </div>
                                   {isSelected && <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />}
                                 </button>
@@ -1521,8 +1471,8 @@ export function PredictionFlow() {
                       </div>
                     )}
                     <div className="flex items-center gap-2 ml-auto">
-                      <svg width="2" height="12" viewBox="0 0 2 12"><line x1="1" y1="0" x2="1" y2="12" stroke="#f97316" strokeWidth="1.5" strokeDasharray="3 2" /></svg>
-                      <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Inicio predicción</span>
+                      <svg width="2" height="12" viewBox="0 0 2 12"><line x1="1" y1="0" x2="1" y2="12" stroke="#6e6e78" strokeWidth="1.5" strokeDasharray="3 2" /></svg>
+                      <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Inicio predicción · Totales semanales</span>
                     </div>
                   </div>
                 </div>
@@ -1539,7 +1489,7 @@ export function PredictionFlow() {
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="plotIndex" tickFormatter={(index) => productChartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                          <XAxis dataKey="plotIndex" tickFormatter={(index) => productChartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={32} interval="preserveStartEnd" dy={8} />
                           <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                           <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
                           <ReferenceLine x={productChartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />
@@ -1746,7 +1696,7 @@ export function PredictionFlow() {
           Anterior
         </button>
         <span className="text-gray-400" style={{ fontSize: "0.8125rem" }}>Paso {currentStep} de {STEPS.length}</span>
-        {currentStep === 3 ? (
+        {currentStep === 3 && analysisStatus !== "done" ? (
           <div className="w-32" />
         ) : currentStep < STEPS.length ? (
           <button
@@ -1782,7 +1732,8 @@ export function PredictionFlow() {
                 }
                 setSavingPlan(false);
               }
-              for (const key of Object.keys(sessionStorage)) { if (key.startsWith("prediction-draft:")) sessionStorage.removeItem(key); }
+              finishing.current = true;
+              clearPredictionDraft();
               navigate("/historial");
             }}
             className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"

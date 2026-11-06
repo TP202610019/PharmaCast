@@ -54,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const auth = await authService.login(email, password);
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith("prediction-draft:")) sessionStorage.removeItem(key);
+    }
     setTokens(auth.accessToken, auth.refreshToken, auth.expiresAt);
 
     const pharmacy = localStorage.getItem(STORAGE.PHARMACY) ?? "Mi Farmacia";
@@ -106,6 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // silently fail - still clear local state
     } finally {
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith("prediction-draft:")) sessionStorage.removeItem(key);
+      }
       invalidateDashboardCache();
       clearTokens();
       setUser(null);

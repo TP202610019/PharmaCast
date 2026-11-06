@@ -1,3 +1,4 @@
+import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
 import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
@@ -43,7 +44,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (!filtered.length) return null;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.date ?? label}</p>
+      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.weekRange ?? payload?.[0]?.payload?.date ?? label}</p>
       {filtered.map((p: any) => (
         <div key={p.name} className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
@@ -274,27 +275,7 @@ export function HistoryDetail() {
   if (loading) return <WorkspaceLoading label="Cargando predicción…" />;
 
   // ── Error / no data state ──
-  if (error || !summary?.latestPredictionId) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 border border-gray-200">
-          <AlertCircle className="h-7 w-7 text-gray-300" />
-        </div>
-        <p className="text-gray-500">{error || "Predicción no encontrada"}</p>
-        <div className="flex gap-2">
-          {error && (
-            <button onClick={loadData}
-              className="flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-colors"
-              style={{ fontSize: "0.875rem", fontWeight: 600 }}>
-              <RefreshCw className="h-4 w-4" />
-              Reintentar
-            </button>
-          )}
-          <button className="module-secondary" onClick={() => navigate("/historial")}><ArrowLeft size={14}/>Volver al historial</button>
-        </div>
-      </div>
-    );
-  }
+  if (error || !summary?.latestPredictionId) return <WorkspaceError title={error ? "Error al cargar la predicción" : "Predicción no encontrada"} message={error || "El análisis solicitado no está disponible."} onRetry={error ? loadData : undefined} onBack={() => navigate("/historial")} />;
 
   const parseCsvHeaders = (file: File): Promise<string[]> =>
     new Promise((resolve) => {
@@ -561,7 +542,7 @@ export function HistoryDetail() {
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="plotIndex" tickFormatter={(index) => chartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} interval={7} dy={8} />
+                          <XAxis dataKey="plotIndex" tickFormatter={(index) => chartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={32} interval="preserveStartEnd" dy={8} />
                           <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                           <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
                           <ReferenceLine x={chartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />
