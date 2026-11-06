@@ -210,8 +210,16 @@ export interface ForecastResultResponse {
 }
 
 export interface PredictionMetricResponse {
+  method?: "XGBoost" | "NaiveWeekly";
+  scope?: "Overall" | "Product";
+  mbe?: number | null;
   // null = aggregate (overall); non-null = per-product row
   productName: string | null;
+  actualTotal?: number | null;
+  predictedTotal?: number | null;
+  absoluteTotalError?: number | null;
+  totalErrorPercentage?: number | null;
+  volumeAccuracy?: number | null;
   wape: number | null;
   rmse: number | null;
   mae: number | null;
@@ -221,6 +229,10 @@ export interface PredictionMetricResponse {
 }
 
 export interface PredictionResponse {
+  productSummaries?: { productName: string; totalPredicted: number; averageDailyPredicted: number; historicalAvg: number | null; variationPercent: number | null }[];
+  productMetrics?: PredictionMetricResponse[];
+  baselineMetrics?: PredictionMetricResponse[];
+  baselineProductMetrics?: PredictionMetricResponse[];
   id: string;
   datasetId: string;
   forecastPeriod: number;

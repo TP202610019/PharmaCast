@@ -79,15 +79,15 @@ export function forecastResultsToProducts(
       name,
       category: planItem?.category ?? "General",
       currentStock: planItem?.stockActual ?? 0,
-      predictedDemand: Math.round(planItem?.demandPredicted ?? avgPredicted),
-      recommendedQty: Math.round(planItem?.toPurchase ?? planItem?.recommendedQuantity ?? avgPredicted),
+      predictedDemand: avgPredicted,
+      recommendedQty: planItem?.toPurchase ?? planItem?.recommendedQuantity ?? agg.total,
       hasInventory: planItem?.stockActual != null,
       priority,
       unitCost: planItem?.estimatedCost
         ? planItem.estimatedCost / Math.max(planItem.recommendedQuantity, 1)
         : 0,
       historicalAvg: historicalMap.get(name) ?? null,
-      totalPredicted: Math.round(agg.total),
+      totalPredicted: agg.total,
     });
   }
 
@@ -112,16 +112,16 @@ export function buildProductChartData(
     .filter((r) => r.productName === productName)
     .sort((a, b) => a.forecastDate.localeCompare(b.forecastDate));
 
-  if (!filtered.length) return buildGeneratedChartData(100, forecastPeriod);
+  if (!filtered.length) return [];
 
   return filtered.map((r) => {
     const conf = Math.round(r.predictedQuantity * 0.11);
     return {
-      date: new Date(r.forecastDate + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
+      date: formatChartDate(r.forecastDate),
       historical: null,
-      predicted: Math.round(r.predictedQuantity),
-      upper: r.upperBound !== null ? Math.round(r.upperBound) : Math.round(r.predictedQuantity) + conf,
-      lower: r.lowerBound !== null ? Math.round(r.lowerBound) : Math.max(0, Math.round(r.predictedQuantity) - conf),
+      predicted: r.predictedQuantity,
+      upper: r.upperBound ?? r.predictedQuantity + conf,
+      lower: r.lowerBound ?? Math.max(0, r.predictedQuantity - conf),
     };
   });
 }
@@ -143,69 +143,45 @@ export function buildGeneratedChartData(baseVal: number, days: number): ChartPoi
   return data;
 }
 
+export function formatChartDate(value: string): string {
+  // Dates identify calendar days: preserve the server's day, without timezone shifts.
+  const day = value.slice(0, 10);
+  const date = new Date(day + "T00:00:00");
+  return Number.isNaN(date.getTime()) ? "—" :
+    date.toLocaleDateString("es-ES", { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function buildChartFromBackendPoints(
   backendPoints: DashboardChartPoint[],
-  forecastPeriod: number,
-  historicalPoints?: DashboardHistoricalPoint[]
+  _forecastPeriod: number,
+  historicalPoints: DashboardHistoricalPoint[] = []
 ): ChartPoint[] {
-  if (!backendPoints.length) return buildGeneratedChartData(100, forecastPeriod);
-
-  const points: ChartPoint[] = [];
-
-  if (historicalPoints && historicalPoints.length > 0) {
-    // Build historical map: date label → quantity
-    const histMap = new Map<string, number>();
-    for (const h of historicalPoints) {
-      const label = new Date(h.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      histMap.set(label, h.quantity);
-    }
-
-    // Add all historical points (historical wins on duplicate dates)
-    for (const h of historicalPoints) {
-      const label = new Date(h.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      points.push({ date: label, historical: h.quantity, predicted: null, upper: null, lower: null });
-    }
-
-    // Add prediction points, skip dates already covered by historical
-    const lastHistQty = historicalPoints[historicalPoints.length - 1]?.quantity ?? null;
-    let bridged = false;
-    for (const p of backendPoints) {
-      const label = new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-      if (histMap.has(label)) continue; // historical takes priority
-
-      const conf = Math.round(p.predicted * 0.11);
-      points.push({
-        date: label,
-        // Bridge only on the very first prediction-only point so the lines visually touch
-        historical: !bridged && lastHistQty != null ? lastHistQty : null,
-        predicted: p.predicted,
-        upper: p.upper ?? Math.round(p.predicted) + conf,
-        lower: p.lower ?? Math.max(0, Math.round(p.predicted) - conf),
-      });
-      bridged = true;
-    }
-  } else {
-    // No historical data — just show predictions
-    for (const p of backendPoints) {
-      const conf = Math.round(p.predicted * 0.11);
-      points.push({
-        date: new Date(p.date + "T00:00:00").toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
-        historical: null,
-        predicted: p.predicted,
-        upper: p.upper ?? Math.round(p.predicted) + conf,
-        lower: p.lower ?? Math.max(0, Math.round(p.predicted) - conf),
-      });
-    }
+  const days = new Map<string, ChartPoint>();
+  const pointFor = (value: string) => {
+    const day = value.slice(0, 10);
+    if (!days.has(day)) days.set(day, {
+      date: formatChartDate(day), historical: null, predicted: null, upper: null, lower: null,
+    });
+    return days.get(day)!;
+  };
+  for (const h of historicalPoints) pointFor(h.date).historical = h.quantity;
+  for (const p of backendPoints) {
+    const point = pointFor(p.date);
+    point.predicted = p.predicted;
+    point.upper = p.upper ?? p.predicted * 1.11;
+    point.lower = p.lower ?? Math.max(0, p.predicted * 0.89);
   }
-
-  return points;
+  return [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, point]) => point);
 }
+
 
 // ─── Extract overall accuracy from metrics ────────────────────────────────────
 
-export function extractAccuracy(metrics: PredictionMetricResponse[]): number {
-  const overall = metrics.find((m) => !m.productName);
-  if (!overall?.wape) return 0;
+export function extractAccuracy(metrics: PredictionMetricResponse[]): number | null {
+  const overall = metrics.find((m) =>
+    (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
+    (m.method == null || m.method === "XGBoost"));
+  if (overall?.wape == null || !Number.isFinite(overall.wape)) return 0;
   return Math.max(0, Math.round((1 - overall.wape / 100) * 100 * 10) / 10);
 }
 

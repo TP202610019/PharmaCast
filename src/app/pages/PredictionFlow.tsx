@@ -47,11 +47,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { datasetService } from "../../services/dataset.service";
 import { mappingService, mappingFieldService } from "../../services/mapping.service";
 import { predictionService } from "../../services/prediction.service";
+import { dashboardService } from "../../services/dashboard.service";
 import { purchasePlanService } from "../../services/purchase-plan.service";
 import {
   forecastResultsToProducts,
   buildProductChartData,
-  buildGeneratedChartData,
+  buildChartFromBackendPoints,
   extractAccuracy,
   type UIProduct,
   type ChartPoint,
@@ -191,7 +192,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
               </span>
             </div>
             <span style={{ color: p.name === "historical" ? "#007AFF" : "#007AFF", fontSize: "0.875rem", fontWeight: 700 }}>
-              {p.value} uds
+              {Number(p.value).toLocaleString("es-PE", { maximumFractionDigits: 2 })} uds
             </span>
           </div>
         ))}
@@ -306,13 +307,19 @@ export function PredictionFlow() {
   /* ── Derived product list ── */
   const products = useMemo<UIProduct[]>(() => {
     if (prediction) {
-      return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? []);
+      return forecastResultsToProducts(prediction.forecastResults, purchasePlan?.items ?? [], prediction.productMetrics ?? prediction.metrics);
     }
     return [];
   }, [prediction, purchasePlan]);
 
-  const accuracy = useMemo(() => (prediction ? extractAccuracy(prediction.metrics) : 0), [prediction]);
-  const totalUnits = useMemo(() => products.reduce((s, p) => s + p.recommendedQty, 0), [products]);
+  const accuracy = useMemo(() => {
+    const overall = prediction?.metrics.find((m) =>
+      (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
+      (m.method == null || m.method === "XGBoost"));
+    return overall?.volumeAccuracy != null && Number.isFinite(overall.volumeAccuracy)
+      ? extractAccuracy(prediction!.metrics) : null;
+  }, [prediction]);
+  const totalUnits = useMemo(() => products.reduce((s, p) => s + p.totalPredicted, 0), [products]);
 
   /* ── Init selected product when products load ── */
   useEffect(() => {
@@ -515,7 +522,9 @@ export function PredictionFlow() {
         // Resolve or create mapping config before triggering prediction
         let resolvedMappingId: string | undefined = appliedMappingId ?? undefined;
 
-        const requiredCatalogFields = fieldCatalog.filter((f) => f.isRequired);
+        const requiredCatalogFields = fieldCatalog.filter(
+          (f) => f.isRequired && f.fieldType === "sales"
+        );
         const hasSalesMapping = files.some((f) => f.type === "sales") &&
           requiredCatalogFields.every((f) => salesMapping[f.fieldKey]);
 
@@ -636,14 +645,19 @@ export function PredictionFlow() {
     [products, selectedProductId]
   );
 
-  const productChartData = useMemo<ChartPoint[]>(() => {
+  const [productChartData, setProductChartData] = useState<ChartPoint[]>([]);
+  useEffect(() => {
+    let active = true;
+    setProductChartData(prediction && selectedProduct
+      ? buildProductChartData(selectedProduct.name, prediction.forecastResults, forecastDays) : []);
     if (prediction && selectedProduct) {
-      return buildProductChartData(selectedProduct.name, prediction.forecastResults, forecastDays);
+      dashboardService.getChart(prediction.id, selectedProduct.name)
+        .then((response) => {
+          if (active) setProductChartData(buildChartFromBackendPoints(response.points, forecastDays, response.historicalPoints));
+        })
+        .catch((error) => console.error("No se pudo cargar el histórico diario", error));
     }
-    if (selectedProduct) {
-      return buildGeneratedChartData(selectedProduct.predictedDemand, forecastDays);
-    }
-    return buildGeneratedChartData(100, forecastDays);
+    return () => { active = false; };
   }, [prediction, selectedProduct, forecastDays]);
 
   const bridgeDateLabel = useMemo(() => {
@@ -655,10 +669,10 @@ export function PredictionFlow() {
   const tableData = useMemo(() =>
     products.map((p) => ({
       ...p,
-      avgHistorical: Math.round(p.predictedDemand * 0.88),
-      variation: ((p.predictedDemand - Math.round(p.predictedDemand * 0.88)) / Math.max(Math.round(p.predictedDemand * 0.88), 1)) * 100,
+      avgHistorical: p.historicalAvg,
+      variation: prediction?.productSummaries?.find((s) => s.productName === p.name)?.variationPercent ?? null,
     })),
-    [products]
+    [products, prediction]
   );
 
   const sidebarProducts = useMemo(() =>
@@ -1328,7 +1342,7 @@ export function PredictionFlow() {
                       {[
                         {
                           label: "Precisión estimada",
-                          value: prediction && accuracy > 0 ? `${accuracy}%` : "—",
+                          value: accuracy != null ? `${accuracy}%` : "—",
                           sub: "Alta confianza",
                           icon: TrendingUp,
                           iconBg: "bg-blue-500/10 border-blue-500/20",
@@ -1383,9 +1397,9 @@ export function PredictionFlow() {
           {currentStep === 4 && (
             <div className="analysis-surface prediction-analysis-surface">
               <AnalysisMetrics items={[
-                {label:"Demanda prevista",icon:TrendingUp,value:totalUnits > 0 ? `${totalUnits.toLocaleString()} uds` : "—"},
+                {label:"Demanda prevista",icon:TrendingUp,value:prediction ? `${totalUnits.toLocaleString("es-PE", { maximumFractionDigits: 2 })} uds` : "—"},
                 {label:"Productos analizados",icon:Package,value:products.length > 0 ? products.length.toString() : "—"},
-                {label:"Precisión",icon:BarChart3,value:accuracy > 0 ? `${accuracy}%` : "—"},
+                {label:"Precisión",icon:BarChart3,value:accuracy != null ? `${accuracy}%` : "—"},
                 {label:"Horizonte",icon:Calendar,value:`${forecastDays} días`},
               ]}/>
 
@@ -1554,7 +1568,7 @@ export function PredictionFlow() {
                       </thead>
                       <tbody>
                         {paginatedTableData.map((row) => {
-                          const varNum = row.variation;
+                          const varNum = row.variation ?? 0;
                           const TrendIcon = varNum > 5 ? TrendingUp : varNum < -5 ? TrendingDown : Minus;
                           const trendColor = varNum > 5 ? "text-blue-500" : varNum < -5 ? "text-red-500" : "text-gray-400";
                           const trendBg = varNum > 5 ? "bg-blue-500/10" : varNum < -5 ? "bg-red-500/10" : "bg-gray-100";
@@ -1562,18 +1576,18 @@ export function PredictionFlow() {
                             <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                               <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.name}</td>
                               <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.category}</td>
-                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical} uds</td>
-                              <td className="py-3 pr-3 text-blue-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand} uds</td>
+                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical == null ? "—" : row.avgHistorical.toLocaleString("es-PE", { maximumFractionDigits: 2 }) + " uds"}</td>
+                              <td className="py-3 pr-3 text-blue-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand.toLocaleString("es-PE", { maximumFractionDigits: 2 })} uds</td>
                               <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
                                 <span className="analysis-variation" style={{ fontWeight: 500 }}>
-                                  {varNum > 0 ? "+" : ""}{varNum.toFixed(1)}%
+                                  {row.variation == null ? "—" : (varNum > 0 ? "+" : "") + varNum.toFixed(1) + "%"}
                                 </span>
                               </td>
                               <td className="py-3">
                                 <span className="analysis-trend"
                                   style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
                                   <TrendIcon className="h-3 w-3" />
-                                  {varNum > 5 ? "Al alza" : varNum < -5 ? "A la baja" : "Estable"}
+                                  {row.variation == null ? "—" : varNum > 5 ? "Al alza" : varNum < -5 ? "A la baja" : "Estable"}
                                 </span>
                               </td>
                             </tr>

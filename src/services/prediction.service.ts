@@ -9,7 +9,7 @@ import type {
 export const predictionService = {
   async execute(datasetId: string, forecastPeriod: number, mappingConfigurationId?: string): Promise<PredictionResponse> {
     const body: CreatePredictionRequest = { datasetId, forecastPeriod, mappingConfigurationId };
-    const { data } = await http.post<ApiResponse<PredictionResponse>>("/api/predictions", body, { timeout: 180_000 });
+    const { data } = await http.post<ApiResponse<PredictionResponse>>("/api/predictions", body, { timeout: 300_000 });
     return data.data!;
   },
 

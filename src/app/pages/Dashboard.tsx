@@ -223,10 +223,10 @@ export function Dashboard() {
   );
 
   // ── Table helpers ──
-  const getAvgHistorical = (p: DashboardProductRow) => Math.round(p.avgPredictedQuantity * 0.88);
+  const getAvgHistorical = (p: DashboardProductRow) => p.historicalAvg;
   const getVariation = (p: DashboardProductRow) => {
     const a = getAvgHistorical(p);
-    return a > 0 ? ((p.avgPredictedQuantity - a) / a) * 100 : 0;
+    return a != null && a > 0 ? ((p.avgPredictedQuantity - a) / a) * 100 : null;
   };
 
   const formatDate = (dateStr: string) =>
@@ -568,8 +568,8 @@ export function Dashboard() {
                             const pConf = priorityConfig[p.priority];
                             const hist = getAvgHistorical(p);
                             const varVal = getVariation(p);
-                            const isUp = varVal > 2;
-                            const isDown = varVal < -2;
+                            const isUp = varVal != null && varVal > 2;
+                            const isDown = varVal != null && varVal < -2;
                             return (
                               <tr key={p.productName} className="border-b border-gray-100 hover:bg-white transition-colors">
                                 <td className="py-3 pr-4">
@@ -578,16 +578,16 @@ export function Dashboard() {
                                     <span className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</span>
                                   </div>
                                 </td>
-                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{hist} uds</td>
+                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{hist == null ? "—" : `${hist} uds`}</td>
                                 <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{Math.round(p.avgPredictedQuantity)} uds</td>
                                 <td className="py-3 pr-4">
                                   <span className="analysis-variation"
                                     style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                                    {isUp ? "+" : isDown ? "" : "~"}{varVal.toFixed(1)}%
+                                    {varVal == null ? "—" : `${isUp ? "+" : isDown ? "" : "~"}${varVal.toFixed(1)}%`}
                                   </span>
                                 </td>
                                 <td className="py-3">
-                                  <span className="analysis-trend">{isUp ? <TrendingUp/> : isDown ? <TrendingDown/> : <Minus/>}{isUp ? "Al alza" : isDown ? "A la baja" : "Estable"}</span>
+                                  <span className="analysis-trend">{varVal == null ? "—" : <>{isUp ? <TrendingUp/> : isDown ? <TrendingDown/> : <Minus/>}{isUp ? "Al alza" : isDown ? "A la baja" : "Estable"}</>}</span>
                                 </td>
                               </tr>
                             );
