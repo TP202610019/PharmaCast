@@ -181,8 +181,8 @@ export function extractAccuracy(metrics: PredictionMetricResponse[]): number | n
   const overall = metrics.find((m) =>
     (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
     (m.method == null || m.method === "XGBoost"));
-  if (overall?.wape == null || !Number.isFinite(overall.wape)) return 0;
-  return Math.max(0, Math.round((1 - overall.wape / 100) * 100 * 10) / 10);
+  if (overall?.volumeAccuracy == null || !Number.isFinite(overall.volumeAccuracy)) return null;
+  return Math.round(overall.volumeAccuracy * 10) / 10;
 }
 
 // ─── Format execution status for display ─────────────────────────────────────
