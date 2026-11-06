@@ -182,7 +182,7 @@ export function extractAccuracy(metrics: PredictionMetricResponse[]): number | n
     (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
     (m.method == null || m.method === "XGBoost"));
   if (overall?.volumeAccuracy == null || !Number.isFinite(overall.volumeAccuracy)) return null;
-  return Math.round(overall.volumeAccuracy * 10) / 10;
+  return Math.max(0, Math.round(overall.volumeAccuracy * 10) / 10);
 }
 
 // ─── Format execution status for display ─────────────────────────────────────

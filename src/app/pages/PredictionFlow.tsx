@@ -1,5 +1,6 @@
 import { exportPurchase, priorityRank } from "../../lib/purchaseExport";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
 import { usePredictionDraft } from "../hooks/usePredictionDraft";
 import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
@@ -30,7 +31,6 @@ import {
   PanelLeftClose,
   Loader2,
   BookOpen,
-  Star,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -263,7 +263,16 @@ export function PredictionFlow() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [forecastDays, setForecastDays] = usePredictionDraft("forecastDays", 30);
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisSeconds, setAnalysisSeconds] = useState(0);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  useEffect(() => {
+    if (analysisStatus !== "running") return;
+    const startedAt = performance.now();
+    const timer = window.setInterval(() => {
+      setAnalysisSeconds(Math.floor((performance.now() - startedAt) / 1000));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [analysisStatus]);
   const [completedStepIdx, setCompletedStepIdx] = useState(-1);
   const [filterPriority, setFilterPriority] = useState<string>("all");
 
@@ -319,6 +328,7 @@ export function PredictionFlow() {
     return overall?.volumeAccuracy != null && Number.isFinite(overall.volumeAccuracy)
       ? extractAccuracy(prediction!.metrics) : null;
   }, [prediction]);
+  const recordCount = files.reduce((sum, file) => sum + (file.rows || 0), 0);
   const totalUnits = useMemo(() => products.reduce((s, p) => s + p.totalPredicted, 0), [products]);
 
   /* ── Init selected product when products load ── */
@@ -502,6 +512,7 @@ export function PredictionFlow() {
   const runAnalysis = useCallback(async () => {
     setAnalysisStatus("running");
     setAnalysisProgress(0);
+    setAnalysisSeconds(0);
     setCompletedStepIdx(-1);
     setAnalysisError("");
 
@@ -575,7 +586,7 @@ export function PredictionFlow() {
 
         setPrediction(result);
         // Present the confirmed completed stages before the result summary.
-        for (let stage = Math.max(0, animIdx); stage < total; stage++) {
+        for (let stage = Math.max(0, animIdx - 1); stage < total; stage++) {
           setCompletedStepIdx(stage);
           setAnalysisProgress(Math.round(((stage + 1) / total) * 100));
           await new Promise(resolve => window.setTimeout(resolve, 350));
@@ -953,7 +964,7 @@ export function PredictionFlow() {
                   </div>
 
                   {/* Saved mapping selector */}
-                  <div className="prediction-saved-config px-6 pt-4 pb-3 border-b border-gray-100">
+                  <div className={`prediction-saved-config ${!savedMappingsLoading && savedMappings.length === 0 ? "prediction-saved-config-empty" : ""} px-6 pt-4 pb-3 border-b border-gray-100`}>
                     <div className="flex items-center gap-2 mb-2">
                       <BookOpen className="h-3.5 w-3.5 text-blue-500" />
                       <span className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Configuración guardada</span>
@@ -990,7 +1001,7 @@ export function PredictionFlow() {
                         )}
                       </div>
                     ) : !savedMappingsLoading ? (
-                      <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
+                      <p className="prediction-config-empty-message text-gray-400" style={{ fontSize: "0.75rem" }}>
                         No hay configuraciones guardadas aún. El mapeo que definas se guardará automáticamente.
                       </p>
                     ) : null}
@@ -1000,22 +1011,24 @@ export function PredictionFlow() {
                       <div className="prediction-mapping-options flex items-center gap-3">
                         <input
                           type="text"
+                          aria-label="Nombre de la configuración"
                           placeholder="Nombre de la configuración (opcional)"
                           value={mappingName}
                           onChange={(e) => setMappingName(e.target.value)}
                           className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-700 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                           style={{ fontSize: "0.8125rem", minWidth: 240 }}
                         />
-                        <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
+                        <div className="prediction-default-option">
+                          <Switch
+                            id="mapping-save-default"
                             checked={saveAsDefault}
-                            onChange={(e) => setSaveAsDefault(e.target.checked)}
-                            className="h-3.5 w-3.5 rounded accent-blue-500 cursor-pointer"
+                            onCheckedChange={setSaveAsDefault}
+                            className="prediction-default-switch"
                           />
-                          <Star className="h-3 w-3 text-blue-500" />
-                          <span className="text-gray-600" style={{ fontSize: "0.75rem" }}>Guardar como predeterminada</span>
-                        </label>
+                          <label htmlFor="mapping-save-default" className="text-gray-600 cursor-pointer select-none">
+                            Guardar como predeterminada
+                          </label>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1206,7 +1219,7 @@ export function PredictionFlow() {
 
                 {analysisStatus === "running" && (
                   <div className="p-6">
-                    <div className="flex items-center gap-4 mb-6 pb-5 border-b border-gray-100">
+                    <div className="flex items-start gap-3 mb-3">
                       <div className="relative shrink-0">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
                           <Activity style={{ height: 18, width: 18 }} className="text-blue-500" />
@@ -1219,7 +1232,7 @@ export function PredictionFlow() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1.5">
                           <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "0.875rem" }}>Procesamiento del análisis</p>
-                          <span className="text-blue-500 shrink-0" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{analysisProgress}%</span>
+                          <span className="text-blue-500 shrink-0" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{analysisProgress >= 73 && primaryDatasetId ? "Esperando resultados" : `${analysisProgress}%`}</span>
                         </div>
                         <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
                           <motion.div
@@ -1229,13 +1242,18 @@ export function PredictionFlow() {
                             transition={{ duration: 0.6, ease: "easeOut" }}
                           />
                         </div>
-                        <p className="text-gray-400 mt-1" style={{ fontSize: "0.6875rem" }}>
-                          {files.reduce((s, f) => s + (f.rows || 0), 0).toLocaleString()} registros · {forecastDays} días a predecir
-                        </p>
+                        <div className="analysis-progress-details">
+                          <p className="text-gray-400">
+                            {recordCount > 0 && `${recordCount.toLocaleString()} registros · `} {forecastDays} días a predecir
+                          </p>
+                          <p className="analysis-process-time">
+                            Tiempo de proceso: {String(Math.floor(analysisSeconds / 60)).padStart(2, "0")}:{String(analysisSeconds % 60).padStart(2, "0")}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                       {PIPELINE_STEPS.map((step, i) => {
                         const isDone = i <= completedStepIdx;
                         const isActive = i === completedStepIdx + 1;
@@ -1243,14 +1261,10 @@ export function PredictionFlow() {
                         return (
                           <motion.div
                             key={i}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
                             transition={{ duration: 0.3, delay: i * 0.05 }}
-                            className={`analysis-pipeline-row flex items-start gap-3 rounded-xl border p-4 transition-all duration-300 ${
-                              isDone ? "border-blue-500/20 bg-blue-500/5"
-                              : isActive ? "border-blue-500/30 bg-blue-500/[0.07] shadow-sm"
-                              : "border-gray-100 bg-gray-50/60"
-                            }`}
+                            className="analysis-pipeline-row flex items-start gap-2"
                           >
                             <div className={`flex h-7 w-7 shrink-0 mt-0.5 items-center justify-center rounded-full border-2 transition-all duration-300 ${
                               isDone ? "bg-blue-500 border-blue-500"
@@ -1280,21 +1294,20 @@ export function PredictionFlow() {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="transition-colors duration-300" style={{
                                   fontSize: "0.8125rem",
-                                  fontWeight: isDone || isActive ? 600 : 400,
+                                  fontWeight: 600,
                                   color: isDone ? "#0066d6" : isActive ? "#111827" : "#9ca3af",
                                 }}>
                                   {step.label}
                                 </span>
-                                {isActive && (
                                   <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-px text-blue-600"
+                                    initial={false}
+                                    animate={{ opacity: isActive ? 1 : 0 }}
+                                    aria-hidden={!isActive}
+                                    className="whitespace-nowrap rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-px text-blue-600"
                                     style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}
                                   >
                                     En curso
                                   </motion.span>
-                                )}
                               </div>
                               <p className="mt-0.5 transition-colors duration-300" style={{
                                 fontSize: "0.6875rem",
@@ -1336,14 +1349,14 @@ export function PredictionFlow() {
                     </motion.div>
 
                     <p className="text-gray-400 mb-4" style={{ fontSize: "0.75rem" }}>
-                      Métricas del modelo · {files.reduce((s, f) => s + (f.rows || 0), 0).toLocaleString()} registros procesados
+                      Métricas del modelo{recordCount > 0 && ` · ${recordCount.toLocaleString()} registros procesados`}
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {[
                         {
                           label: "Precisión estimada",
                           value: accuracy != null ? `${accuracy}%` : "—",
-                          sub: "Alta confianza",
+                          sub: accuracy === 0 ? "Error de volumen igual o superior al 100 %" : undefined,
                           icon: TrendingUp,
                           iconBg: "bg-blue-500/10 border-blue-500/20",
                           iconColor: "text-blue-500",

@@ -10,7 +10,7 @@ import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
 
 export function Login() {
   const navigate = useNavigate();
-  const { login, loginDemo } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -33,13 +33,6 @@ export function Login() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDemo = async () => {
-    setLoading(true); setError("");
-    try { await loginDemo(); navigate("/panel"); }
-    catch (err) { setError(extractApiErrorMessage(err, "No se pudo acceder a la cuenta demo.")); }
-    finally { setLoading(false); }
   };
 
   return <AuthShell mode="login"><div className="auth-form">
@@ -134,22 +127,6 @@ export function Login() {
               )}
             </button>
           </form>
-
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-gray-400" style={{ fontSize: "0.8125rem" }}>o</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDemo}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-3 text-gray-600 transition-all hover:border-gray-400 hover:text-gray-900 hover:shadow-sm"
-            style={{ fontSize: "0.9375rem" }}
-          >
-            Acceder con cuenta demo
-          </button>
 
           <p className="text-center text-gray-500 mt-8" style={{ fontSize: "0.9375rem" }}>
             ¿No tienes una cuenta?{" "}
