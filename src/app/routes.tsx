@@ -1,4 +1,5 @@
-import { createBrowserRouter, redirect } from "react-router";
+import { createBrowserRouter, redirect, Navigate } from "react-router";
+import { useAuth } from "./context/AuthContext";
 import { Root } from "./components/Root";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
@@ -11,12 +12,8 @@ import { ForgotPassword } from "./pages/ForgotPassword";
 import { Terms } from "./pages/Terms";
 
 function NotFound() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-4">
-      <p className="text-gray-900" style={{ fontSize: "4rem", fontWeight: 800 }}>404</p>
-      <p className="text-gray-400">Página no encontrada</p>
-    </div>
-  );
+  const { isLoggedIn } = useAuth();
+  return <Navigate to={isLoggedIn ? "/panel" : "/"} replace />;
 }
 
 export const router = createBrowserRouter([
