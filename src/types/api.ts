@@ -95,7 +95,7 @@ export interface DashboardSummaryResponse {
   latestPredictionDate: string | null;
   forecastPeriod: number | null;
   latestStatus: ExecutionStatus | null;
-  accuracy: number;
+  accuracy: number | null;
   totalProducts: number;
   criticalCount: number;
   totalForecastedUnits: number;
