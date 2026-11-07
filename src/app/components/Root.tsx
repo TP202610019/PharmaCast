@@ -11,7 +11,7 @@ export function Root() {
   if (workspace && !isLoggedIn) return <Navigate to="/acceso" replace />;
   return <div className={`min-h-screen text-gray-900 flex flex-col ${workspace ? "workspace-root" : ""} ${pathname === "/predicciones/nueva" ? "prediction-root" : ""}`} style={{backgroundColor:pathname === "/" ? "#090d16" : workspace ? "#ffffff" : "#F5F5F7"}}>
     <Navbar />
-    <main className={pathname === "/" ? "pc-landing-main flex-1" : "workspace-main flex-1"}><Outlet /></main>
+    <main className={pathname === "/" ? "pc-landing-main flex-1" : "workspace-main flex flex-1 flex-col"}><Outlet /></main>
     <Footer workspace={workspace} />
   </div>;
 }

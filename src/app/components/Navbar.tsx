@@ -8,7 +8,7 @@ import "../../styles/chrome.css";
 import { PharmaCastLogo } from "./PharmaCastLogo";
 
 const publicLinks = [
-  { label: "Producto", path: "/#producto" },
+  { label: "Beneficios", path: "/#beneficios" },
   { label: "Cómo funciona", path: "/#recorrido" },
   { label: "Preguntas frecuentes", path: "/#preguntas" },
 ];
@@ -27,6 +27,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
   const showAccountNav = isLoggedIn && workspace;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(() => window.scrollY > 24);
+  const solid = scrolled || location.pathname === "/terminos";
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 24);
     update();
@@ -46,13 +47,19 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
   }, []);
 
   const handleSectionNav = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
-    event.preventDefault();
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     setMobileOpen(false);
-    const hash = path.slice(path.indexOf("#"));
-    navigate(path);
-    window.setTimeout(() => {
-      document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-    }, 230);
+    if (location.pathname + location.hash !== path) return;
+    event.preventDefault();
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (path === "/#inicio") {
+      window.scrollTo({ top: 0, behavior: reducedMotion ? "instant" : "smooth" });
+    } else {
+      document.getElementById(path.slice(2))?.scrollIntoView({
+        behavior: reducedMotion ? "instant" : "smooth",
+        block: "start",
+      });
+    }
   };
 
   const userInitial = (user?.name ?? "U")[0].toUpperCase();
@@ -74,14 +81,14 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
     navigate("/acceso");
   };
 
-  if (backLink) return <nav aria-label="Navegación principal" className={`pc-navbar pc-nav-dark pc-legal-nav z-50 ${scrolled ? "is-scrolled" : ""} ${plain ? "pc-auth-plain" : ""}`}><div className="pc-nav-inner"><div className="pc-nav-row"><Link to="/" className="pc-brand" aria-label="PharmaCast, inicio"><PharmaCastLogo /></Link><Link to={backLink.to} className="pc-legal-back"><ArrowLeft size={15}/>{backLink.label}</Link></div></div></nav>;
+  if (backLink) return <nav aria-label="Navegación principal" className={`pc-navbar pc-nav-dark pc-legal-nav z-50 ${solid ? "is-scrolled" : ""} ${plain ? "pc-auth-plain" : ""}`}><div className="pc-nav-inner"><div className="pc-nav-row"><Link to="/#inicio" onClick={event => handleSectionNav(event, "/#inicio")} className="pc-brand" aria-label="PharmaCast, inicio"><PharmaCastLogo /></Link><Link to={backLink.to} className="pc-legal-back"><ArrowLeft size={15}/>{backLink.label}</Link></div></div></nav>;
 
   return (
     <>
-      <nav aria-label="Navegación principal" className={`pc-navbar z-50 ${scrolled ? "is-scrolled" : ""} ${workspace ? "pc-nav-workspace" : ""} ${workspace || ["/", "/terminos"].includes(location.pathname) ? "pc-nav-dark" : ""}`}>
+      <nav aria-label="Navegación principal" className={`pc-navbar z-50 ${solid ? "is-scrolled" : ""} ${workspace ? "pc-nav-workspace" : ""} ${workspace || ["/", "/terminos"].includes(location.pathname) ? "pc-nav-dark" : ""}`}>
         <div className="pc-nav-inner">
           <div className="pc-nav-row">
-            <Link to={showAccountNav ? "/panel" : "/"} className="pc-brand" aria-label="PharmaCast, inicio">
+            <Link to={showAccountNav ? "/panel" : "/#inicio"} onClick={showAccountNav ? undefined : event => handleSectionNav(event, "/#inicio")} className="pc-brand" aria-label="PharmaCast, inicio">
               <PharmaCastLogo />
             </Link>
 
@@ -112,7 +119,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
               </div>
             )}
 
-            {!showAccountNav && <div className="pc-public-links">{publicLinks.map(link => <a key={link.path} href={link.path} onClick={event => handleSectionNav(event, link.path)} className={location.hash === link.path.slice(1) ? "is-active" : ""}>{link.label}</a>)}</div>}
+            {!showAccountNav && <div className="pc-public-links">{publicLinks.map(link => <Link key={link.path} to={link.path} onClick={event => handleSectionNav(event, link.path)} className={location.hash === link.path.slice(1) ? "is-active" : ""}>{link.label}</Link>)}</div>}
             {/* Right side */}
             <div className="hidden md:flex items-center gap-3">
               {showAccountNav ? (
@@ -175,7 +182,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                             style={{ fontSize: "0.875rem" }}
                           >
                             <Settings className="h-4 w-4 text-gray-400" />
-                            Configuración
+                            Mi cuenta
                           </button>
                           <button
                             onClick={() => { setShowDropdown(false); setShowLogoutModal(true); }}
@@ -219,7 +226,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
               id="pc-mobile-menu"
               className="pc-mobile-menu"
             >
-              {!showAccountNav && <div className="pc-mobile-links">{publicLinks.map(link => <a key={link.path} href={link.path} onClick={event => handleSectionNav(event, link.path)}>{link.label}<ArrowUpRight size={16}/></a>)}</div>}
+              {!showAccountNav && <div className="pc-mobile-links">{publicLinks.map(link => <Link key={link.path} to={link.path} onClick={event => handleSectionNav(event, link.path)}>{link.label}<ArrowUpRight size={16}/></Link>)}</div>}
               {showAccountNav && (
                 <>
                   <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-50 mb-2">
@@ -261,7 +268,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                       style={{ fontSize: "0.875rem" }}
                     >
                       <Settings className="h-4 w-4" />
-                      Configuración
+                      Mi cuenta
                     </button>
                     <button
                       onClick={() => { setMobileOpen(false); setShowLogoutModal(true); }}
@@ -319,7 +326,9 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                   ¿Cerrar sesión?
                 </h2>
                 <p className="text-gray-500 mb-7" style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>
-                  Se cerrará tu sesión activa y serás redirigido al inicio de sesión.
+                  {location.pathname === "/predicciones/nueva"
+                    ? "Se cerrará la predicción en curso. Los análisis completados seguirán disponibles en el historial."
+                    : "Se cerrará tu sesión activa y volverás al inicio de sesión."}
                 </p>
                 <div className="flex flex-col gap-3">
                   <button

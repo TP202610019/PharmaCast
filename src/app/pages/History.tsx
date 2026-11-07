@@ -1,3 +1,7 @@
+import { peekCache } from "../../lib/dashboardCache";
+import type { PredictionSummaryResponse } from "../../types/api";
+import { WorkspaceError } from "../components/WorkspaceError";
+import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -47,15 +51,15 @@ const statusConfig = {
 
 export function History() {
   const navigate = useNavigate();
-  const [records, setRecords] = useState<PredictionUIRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<PredictionUIRecord[]>(() => (peekCache<PredictionSummaryResponse[]>("history") ?? []).map(summaryToUIRecord));
+  const [loading, setLoading] = useState(() => peekCache("history") === undefined);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
   const loadHistory = useCallback(async () => {
-    setLoading(true);
+    setLoading(peekCache("history") === undefined);
     setError("");
     try {
       const summaries = await predictionService.getHistory();
@@ -103,49 +107,13 @@ export function History() {
       r.status === ExecutionStatus.Processing
   ).length;
 
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>
-            Cargando historial...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <WorkspaceLoading label="Cargando historial…" />;
 
-  if (error) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 border border-red-100">
-            <AlertCircle className="h-7 w-7 text-red-400" />
-          </div>
-          <div>
-            <p className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>
-              Error al cargar historial
-            </p>
-            <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>
-              {error}
-            </p>
-          </div>
-          <button
-            onClick={loadHistory}
-            className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white hover:bg-blue-400 transition-colors"
-            style={{ fontSize: "0.875rem", fontWeight: 600 }}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (error && peekCache("history") === undefined) return <WorkspaceError title="Error al cargar el historial" message={error} onRetry={loadHistory} />;
 
   return (
     <div className="history-page workspace-page">
+      {error && <p role="status" className="text-sm text-red-500">No se pudo actualizar el historial. Se muestran los datos anteriores.</p>}
       <header className="module-heading"><div><h1>Historial de predicciones</h1><p>Revisa tus análisis anteriores y vuelve a cada resultado.</p></div><button className="module-primary" onClick={() => navigate("/predicciones/nueva")}><BarChart3 size={16}/>Nueva predicción</button></header>
 
       {/* Summary stats */}

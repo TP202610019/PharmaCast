@@ -1,7 +1,11 @@
+import { AuthFieldError } from "../components/AuthFieldError";
+import { PasswordRequirements, passwordRequirements } from "../components/PasswordRequirements";
+import http from "../../lib/http";
+import { extractApiErrorMessage } from "../context/AuthContext";
 import { AuthShell } from "../components/AuthShell";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router";
-import { Lock, Eye, EyeOff, Activity, Mail, ArrowLeft, CheckCircle, AlertCircle, Send, RefreshCw, ShieldCheck } from "lucide-react";
+import { Lock, Eye, EyeOff, Activity, Mail, CheckCircle, Send, RefreshCw, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 type Step = "email" | "verify" | "reset" | "success";
@@ -25,6 +29,7 @@ export function ForgotPassword() {
   const [confirmPass, setConfirmPass] = useState("");
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   const [resetError, setResetError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -33,6 +38,7 @@ export function ForgotPassword() {
   }, []);
 
   const startCooldown = () => {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
     setResendCooldown(60);
     cooldownRef.current = setInterval(() => {
       setResendCooldown((prev) => {
@@ -42,18 +48,27 @@ export function ForgotPassword() {
     }, 1000);
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email) { setError("Por favor ingresa tu correo electrónico."); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError("Por favor ingresa un correo electrónico válido."); return; }
+    if (!email) { setError("Ingresa tu correo."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Formato de correo no válido."); return; }
+    if (loading) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await http.post("/api/auth/recovery/request", { email: email.trim() });
       setStep("verify");
       startCooldown();
       setTimeout(() => inputRefs.current[0]?.focus(), 300);
-    }, 1400);
+    } catch (err) {
+      setError((err as { status?: number } | null)?.status === 502
+        ? "No pudimos enviar el código."
+        : (err as { status?: number } | null)?.status === 404
+          ? "No hay una cuenta activa con ese correo."
+          : extractApiErrorMessage(err, "No pudimos enviar el código."));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCodeInput = (idx: number, value: string) => {
@@ -80,39 +95,56 @@ export function ForgotPassword() {
     setTimeout(() => inputRefs.current[focusIdx]?.focus(), 0);
   };
 
-  const handleResend = () => {
-    if (resendCooldown > 0) return;
-    setCode(["", "", "", "", "", ""]);
+  const handleResend = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setLoading(true);
     setCodeError("");
-    startCooldown();
-    setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    try {
+      await http.post("/api/auth/recovery/request", { email: email.trim() });
+      setCode(["", "", "", "", "", ""]);
+      startCooldown();
+      inputRefs.current[0]?.focus();
+    } catch (err) {
+      setCodeError(extractApiErrorMessage(err, "No se pudo reenviar el código."));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const fullCode = code.join("");
     if (fullCode.length < 6) { setCodeError("Por favor ingresa los 6 dígitos del código."); return; }
     setVerifying(true);
     setCodeError("");
-    setTimeout(() => {
-      setVerifying(false);
+    try {
+      await http.post("/api/auth/recovery/verify", { email, code: fullCode });
       setStep("reset");
-    }, 1400);
+    } catch (err) {
+      setCodeError(extractApiErrorMessage(err, "Código inválido o vencido."));
+    } finally {
+      setVerifying(false);
+    }
   };
 
-  const handleSavePassword = (e: React.FormEvent) => {
+  const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError("");
-    if (newPass.length < 8) { setResetError("La nueva contraseña debe tener al menos 8 caracteres."); return; }
+    setPasswordError("");
+    if (!passwordRequirements.every((rule) => rule.test(newPass))) { setPasswordError("Completa los requisitos de la contraseña."); return; }
     if (newPass !== confirmPass) { setResetError("Las contraseñas no coinciden."); return; }
     
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      await http.post("/api/auth/recovery/reset", { email, code: code.join(""), password: newPass });
       setStep("success");
-    }, 1200);
+    } catch (err) {
+      setResetError(extractApiErrorMessage(err, "No se pudo cambiar la contraseña."));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  return <AuthShell mode="recovery"><div className="auth-form auth-recovery-form">          <AnimatePresence mode="wait">
+  return <AuthShell mode="recovery"><div className="auth-form auth-recovery-form">          <AnimatePresence mode="wait" initial={false}>
 
             {/* ── STEP 1: EMAIL ── */}
             {step === "email" && (
@@ -123,21 +155,17 @@ export function ForgotPassword() {
                   <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Ingresa tu correo y te enviaremos un código de 6 dígitos</p>
                 </div>
 
-                <form onSubmit={handleEmailSubmit} className="space-y-5">
-                  {error && (
-                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                      <p className="text-red-600" style={{ fontSize: "0.875rem" }}>{error}</p>
-                    </motion.div>
-                  )}
+                <form noValidate onSubmit={handleEmailSubmit} className="space-y-5">
+
                   <div className="space-y-1.5">
                     <label className="text-gray-700" style={{ fontSize: "0.875rem", fontWeight: 500 }}>Correo electrónico</label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@farmacia.com"
+                      <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(""); }} placeholder="tu@farmacia.com"
                         className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                         style={{ fontSize: "0.9375rem" }} />
                     </div>
+                    <AuthFieldError message={error} />
                   </div>
                   <button type="submit" disabled={loading}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
@@ -165,14 +193,11 @@ export function ForgotPassword() {
                   <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.75rem", fontWeight: 700 }}>Verifica tu identidad</h1>
 
                   {/* Info banner */}
-                  <div className="flex items-start gap-3 mt-4 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3.5">
+                  <div className="flex items-start gap-2 mt-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
                     <ShieldCheck className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-gray-700" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
-                        Se envió un código de 6 dígitos a:
-                      </p>
-                      <p className="text-blue-600 mt-0.5" style={{ fontSize: "0.875rem", fontWeight: 700 }}>{email}</p>
-                      <p className="text-gray-400 mt-1" style={{ fontSize: "0.75rem" }}>Revisa tu bandeja de entrada y la carpeta de spam</p>
+                    <div className="min-w-0 text-sm leading-5">
+                      <p className="break-all font-semibold text-blue-600">{email}</p>
+                      <p className="text-gray-600">Si el correo está registrado, recibirás un código.</p>
                     </div>
                   </div>
                 </div>
@@ -205,23 +230,19 @@ export function ForgotPassword() {
                         />
                       ))}
                     </div>
-                    {codeError && (
-                      <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-red-500 mt-2 flex items-center gap-1.5" style={{ fontSize: "0.8125rem" }}>
-                        <AlertCircle className="h-3.5 w-3.5" />{codeError}
-                      </motion.p>
-                    )}
                   </div>
 
                   {/* Verify button */}
                   <button onClick={handleVerify} disabled={verifying || code.join("").length < 6}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-colors enabled:hover:bg-blue-400 disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
                     {verifying ? (
                       <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Verificando...</>
                     ) : (
-                      <><ShieldCheck className="h-4 w-4" />Verificar código</>
+                      "Verificar código"
                     )}
                   </button>
+                  {codeError && <div role="alert" className="!mt-2 text-center text-xs leading-4 text-red-600">{codeError}</div>}
 
                   {/* Resend code */}
                   <div className="flex flex-col items-center gap-2 pt-2">
@@ -258,16 +279,11 @@ export function ForgotPassword() {
                 <div className="mb-8">
                   <p className="text-blue-500 mb-1" style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.05em" }}>PASO 3 DE 3</p>
                   <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.75rem", fontWeight: 700 }}>Crea una nueva contraseña</h1>
-                  <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Asegúrate de que tenga al menos 8 caracteres.</p>
+                  <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Elige una contraseña que cumpla estos requisitos.</p>
                 </div>
 
                 <form onSubmit={handleSavePassword} className="space-y-5">
-                  {resetError && (
-                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                      <p className="text-red-600" style={{ fontSize: "0.875rem" }}>{resetError}</p>
-                    </motion.div>
-                  )}
+
 
                   <div className="space-y-4">
                     <div>
@@ -275,7 +291,7 @@ export function ForgotPassword() {
                       <div className="relative">
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input type={showNewPass ? "text" : "password"} value={newPass}
-                          onChange={(e) => setNewPass(e.target.value)} placeholder="Mín. 8 caracteres" autoFocus
+                          onChange={(e) => { setNewPass(e.target.value); setPasswordError(""); setResetError(""); }} placeholder="Ingresa tu nueva contraseña" autoComplete="new-password" autoFocus
                           className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                           style={{ fontSize: "0.9375rem" }} />
                         <button type="button" onClick={() => setShowNewPass(!showNewPass)}
@@ -284,12 +300,14 @@ export function ForgotPassword() {
                         </button>
                       </div>
                     </div>
+                    <PasswordRequirements password={newPass} />
+                    <AuthFieldError message={passwordError} />
                     <div>
                       <label className="text-gray-700 block mb-1.5" style={{ fontSize: "0.875rem", fontWeight: 500 }}>Confirmar nueva contraseña</label>
                       <div className="relative">
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input type={showConfirmPass ? "text" : "password"} value={confirmPass}
-                          onChange={(e) => setConfirmPass(e.target.value)} placeholder="Repite la nueva contraseña"
+                          onChange={(e) => { setConfirmPass(e.target.value); setResetError(""); }} placeholder="Repite la nueva contraseña"
                           className={`w-full rounded-xl border bg-white pl-10 pr-10 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 transition-all ${
                             confirmPass && confirmPass === newPass
                               ? "border-green-400 focus:border-green-500 focus:ring-green-500/20"
@@ -307,6 +325,7 @@ export function ForgotPassword() {
                         </p>
                       )}
                     </div>
+                    {resetError && <AuthFieldError message={resetError} />}
                   </div>
 
                   <button type="submit" disabled={saving || !newPass || !confirmPass}
@@ -324,18 +343,17 @@ export function ForgotPassword() {
 
             {/* ── SUCCESS POPUP / VIEW ── */}
             {step === "success" && (
-              <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }} className="text-center relative z-10 bg-white rounded-3xl p-8 border border-gray-100 shadow-xl shadow-blue-500/5">
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-green-500/10 border border-green-500/20 mx-auto mb-6">
-                  <CheckCircle className="h-10 w-10 text-green-500" />
+              <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }} className="!mb-0 flex flex-col text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10 border border-green-500/20 mx-auto mb-6">
+                  <CheckCircle className="h-7 w-7 text-green-500" />
                 </div>
-                <h2 className="text-gray-900 mb-3" style={{ fontSize: "1.5rem", fontWeight: 700 }}>Cambio de contraseña exitoso</h2>
+                <h2 className="text-gray-900 mb-3" style={{ fontSize: "1.5rem", fontWeight: 700 }}>Contraseña actualizada</h2>
                 <p className="text-gray-500 mb-8" style={{ fontSize: "0.9375rem", lineHeight: 1.6 }}>
-                  Tu contraseña se ha actualizado correctamente. Ya puedes acceder a tu cuenta de PharmaCast con tus nuevas credenciales.
+                  Ya puedes iniciar sesión en PharmaCast<br />con tu nueva contraseña.
                 </p>
                 <Link to="/acceso"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20"
-                  style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
-                  <ArrowLeft className="h-4 w-4" />
+                  className="flex w-full items-center justify-center rounded-full bg-blue-500 px-6 py-3 transition-colors hover:bg-blue-400"
+                  style={{ color: "#fff", fontWeight: 600, fontSize: "0.9375rem" }}>
                   Iniciar sesión
                 </Link>
               </motion.div>

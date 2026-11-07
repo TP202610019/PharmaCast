@@ -142,12 +142,12 @@ html{scroll-behavior:smooth;scroll-padding-top:90px}@media(prefers-reduced-motio
 @media(max-width:600px){.settings-dialog>div:first-child{padding:13px 18px}.settings-dialog>div:nth-child(2){padding-inline:18px}.settings-dialog .settings-tabs{gap:18px}.settings-dialog .settings-tabs button{font-size:12px!important}}
 
 /* Keep the modal and its footer stationary while switching sections. */
-.settings-dialog{height:min(620px,80dvh);max-height:80dvh!important}
-.settings-dialog .settings-body{min-height:0;flex:1 1 0;overflow-y:auto;overscroll-behavior:contain}
+.settings-dialog{max-height:80dvh!important}
+.settings-dialog .settings-body{min-height:0;flex:0 1 auto;overflow-y:auto;overscroll-behavior:contain}
 .settings-dialog .settings-variable-tabs{padding:3px;gap:3px;border-radius:11px;margin-bottom:18px}
 .settings-dialog .settings-variable-tabs button{font-size:12px!important;padding:7px 11px;line-height:1.4;min-height:33px;border-radius:8px}
 .settings-dialog .settings-variable-tabs button svg{width:14px;height:14px}
-@media(max-width:600px){.settings-dialog{height:min(620px,85dvh);max-height:85dvh!important}.settings-dialog .settings-variable-tabs button{font-size:11px!important;padding:7px 9px}}
+@media(max-width:600px){.settings-dialog{max-height:85dvh!important}.settings-dialog .settings-variable-tabs button{font-size:11px!important;padding:7px 9px}}
 
 .settings-dialog .settings-footer{padding-block:10px;min-height:56px}.settings-dialog .settings-footer button{min-height:35px;padding:8px 17px;font-size:12px!important;border-radius:22px;line-height:1.4}
 
@@ -157,3 +157,17 @@ html{scroll-behavior:smooth;scroll-padding-top:90px}@media(prefers-reduced-motio
 html{overflow-y:scroll;scrollbar-gutter:stable}
 /* Keep the root scrollbar present; Radix still blocks background wheel events. */
 html body[data-scroll-locked]{overflow:visible!important;margin-right:0!important;padding-right:0!important;--removed-body-scroll-bar-size:0px!important}
+
+.settings-edit-dialog input {
+  min-height: 40px;
+  background: #f8f8fa;
+  border-color: #dedee6;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.settings-edit-dialog input:focus {
+  background: #fff;
+  border-color: #007aff;
+  box-shadow: 0 0 0 3px #007aff12;
+}

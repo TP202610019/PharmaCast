@@ -56,3 +56,58 @@
 .analysis-evaluation-heading{padding:0 0 18px!important;border:0!important}.analysis-evaluation-heading h2{font-size:18px;font-weight:600;letter-spacing:-.3px;line-height:1.4;margin:0 0 4px}.analysis-evaluation-heading p{margin:0;color:#85858f;font-size:13px!important;line-height:1.6}
 
 .analysis-evaluation-heading{padding-bottom:0!important}.analysis-evaluation-heading+div{padding-top:16px!important}
+
+/* Shared saved-analysis presentation: wizard, history and latest prediction. */
+.shared-prediction-analysis{border:0;background:#fff;box-shadow:none;border-radius:0}
+.shared-plan-heading,.shared-table-toolbar,.shared-chart-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.shared-plan-heading h2{font-size:20px;font-weight:600;letter-spacing:-.4px;margin:0 0 5px;color:#1d1d1f}
+.shared-plan-heading p,.shared-table-toolbar p{font-size:13px;color:#85858f;margin:0;line-height:1.6}
+.shared-chart-heading>div{display:flex;align-items:center;gap:14px;min-width:0;flex:1}
+.shared-chart-heading h3{margin:0;overflow-wrap:anywhere}
+.shared-chart-heading .module-secondary{flex-shrink:0}
+.shared-confidence{border:1px solid #b8d8ff;border-radius:12px;padding:9px 13px;background:#eaf3ff;color:#007aff;font-size:12px;cursor:pointer}
+.shared-chart-legend{display:flex;align-items:center;gap:21px;flex-wrap:wrap;margin:17px 0 8px;color:#85858f;font-size:12px}
+.shared-chart-legend>span{display:inline-flex;align-items:center;gap:8px}
+.shared-chart-legend i{display:inline-block;width:26px;height:0;border-top:2px solid #007aff}
+.shared-chart-legend i.dashed{border-top-style:dashed}
+.shared-chart-legend i.band{height:11px;border:1px solid #a8d0ff;border-radius:3px;background:#e3f0ff}
+.shared-chart-legend i.boundary{width:0;height:13px;border:0;border-left:1.5px dashed #85858f}
+.shared-chart-period{margin-left:auto}
+.shared-chart-plot{min-height:320px;padding-top:12px}
+.analysis-inline-state{min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#85858f;font-size:13px;text-align:center;padding:20px}
+.shared-chart-plot .analysis-inline-state{min-height:320px}
+.analysis-inline-state svg{color:#007aff}
+.analysis-chart-tooltip{background:#fff;border:1px solid #ededf2;border-radius:16px;box-shadow:0 8px 25px #1d1d1f12;padding:13px 16px;font-size:12px;color:#85858f;max-width:290px}
+.analysis-chart-tooltip strong{font-size:11px;font-weight:500;display:block;margin-bottom:9px}
+.analysis-chart-tooltip p{display:flex;gap:22px;justify-content:space-between;margin:6px 0}
+.analysis-chart-tooltip b{color:#007aff;font-size:14px;font-weight:600}
+.shared-analysis-search{display:flex;align-items:center;gap:9px;border:1px solid #dedee6;background:#fafafb;border-radius:12px;padding:11px 13px;min-width:220px;color:#85858f;font-size:13px}
+.shared-analysis-search:focus-within{border-color:#007aff;background:#fff;box-shadow:0 0 0 3px #007aff08}
+.shared-analysis-search input{width:100%;min-width:0;outline:none;border:0;background:transparent;color:#1d1d1f;font:inherit}
+.shared-analysis-search svg{flex-shrink:0}
+.shared-drawer-heading{display:flex;justify-content:space-between;align-items:center;padding:20px 18px;border-bottom:1px solid #ededf2;font-size:14px}
+.shared-drawer-heading button{border:0;background:transparent;color:#85858f;cursor:pointer;padding:4px}
+.analysis-medication-drawer>.shared-analysis-search{margin:13px 16px;min-width:0}
+.shared-medication-option{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;padding:14px 18px;width:100%;font-size:13px;background:#fff;color:#1d1d1f;cursor:pointer;overflow-wrap:anywhere}
+.shared-medication-option:hover{background:#fafafb}
+.shared-medication-option.is-selected{color:#007aff;font-weight:600;background:#f4f8ff}
+.shared-medication-option svg{flex-shrink:0}
+.shared-table-toolbar{margin-bottom:16px}
+.shared-table-toolbar h3{font-size:18px;font-weight:600;margin:0 0 4px}
+.shared-analysis-number{color:#007aff;font-weight:500}
+.shared-priority-note{font-size:11px;color:#85858f;margin:0 0 12px}
+.analysis-priority-chip{display:inline-block;border:0;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:600;line-height:1.35;white-space:nowrap}
+.analysis-priority-chip.is-critical{background:#fdecf0;color:#d21b32}
+.analysis-priority-chip.is-high{background:#fff0e5;color:#b95500}
+.analysis-priority-chip.is-medium{background:#fff7df;color:#976600}
+.analysis-priority-chip.is-low{background:#eaf7f0;color:#247a50}
+.shared-analysis-notice{font-size:12px;color:#6e6e78;line-height:1.6;margin:0}
+.shared-analysis-notice button{color:#007aff;font-weight:500;margin-left:8px;cursor:pointer}
+.analysis-pagination{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;padding-top:18px;color:#85858f;font-size:12px}
+.analysis-pagination>div{display:flex;align-items:center;gap:5px}
+.analysis-pagination button{display:flex;align-items:center;justify-content:center;min-width:33px;height:33px;border:1px solid transparent;border-radius:10px;background:#fff;color:#6e6e78;font-size:12px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.analysis-pagination button:hover:not(:disabled){border-color:#dedee6;color:#007aff;background:#fafafb}
+.analysis-pagination button[aria-current=page]{border-color:#a8d0ff;color:#007aff;background:#eaf3ff;font-weight:600}
+.analysis-pagination button:disabled{opacity:.3;cursor:default}
+.analysis-pagination button:focus-visible{outline:2px solid #007aff;outline-offset:2px}
+@media(max-width:767px){.shared-prediction-analysis{padding:19px}.shared-chart-heading>div{flex-wrap:wrap}.shared-chart-period{margin-left:0}.shared-analysis-search{width:100%;min-width:0}.shared-table-toolbar{align-items:stretch}.shared-plan-heading .module-heading-actions{width:100%;flex-wrap:wrap}.analysis-pagination{justify-content:center}.analysis-pagination>span{width:100%;text-align:center}.analysis-pagination>div{gap:2px}.analysis-pagination button{min-width:29px;height:32px}.shared-prediction-analysis .analysis-table-section table{min-width:620px}}

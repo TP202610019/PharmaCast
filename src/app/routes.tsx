@@ -1,4 +1,5 @@
-import { createBrowserRouter, redirect } from "react-router";
+import { createBrowserRouter, redirect, Navigate } from "react-router";
+import { useAuth } from "./context/AuthContext";
 import { Root } from "./components/Root";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
@@ -11,12 +12,8 @@ import { ForgotPassword } from "./pages/ForgotPassword";
 import { Terms } from "./pages/Terms";
 
 function NotFound() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-4">
-      <p className="text-gray-900" style={{ fontSize: "4rem", fontWeight: 800 }}>404</p>
-      <p className="text-gray-400">Página no encontrada</p>
-    </div>
-  );
+  const { isLoggedIn } = useAuth();
+  return <Navigate to={isLoggedIn ? "/panel" : "/"} replace />;
 }
 
 export const router = createBrowserRouter([
@@ -63,12 +60,20 @@ let lastScrollLocationKey = router.state.location.key;
 router.subscribe((state) => {
   if (state.navigation.state !== "idle" || state.location.key === lastScrollLocationKey) return;
   lastScrollLocationKey = state.location.key;
-  const hash = state.location.hash;
+  const { hash, state: navigationState } = state.location;
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (hash) {
+    if (hash === "#inicio") {
+      window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    } else if (hash) {
       document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     } else {
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: navigationState?.smoothScrollToTop && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "smooth"
+          : "instant",
+      });
     }
   }));
 });

@@ -1,3 +1,4 @@
+import { withCache, invalidateAnalysisLists } from "../lib/dashboardCache";
 import http from "../lib/http";
 import type {
   ApiResponse,
@@ -19,8 +20,17 @@ export const purchasePlanService = {
       inventoryDatasetId,
       inventoryFieldMappings,
     };
-    const { data } = await http.post<ApiResponse<PurchasePlanResponse>>("/api/purchase-plans", body);
-    return data.data!;
+    return withCache(`plan:${predictionExecutionId}`, async () => {
+      try {
+        const { data } = await http.post<ApiResponse<PurchasePlanResponse>>("/api/purchase-plans", body);
+        invalidateAnalysisLists();
+        return data.data!;
+      } catch (error) {
+        if ((error as { status?: number }).status !== 409) throw error;
+        const { data } = await http.get<ApiResponse<PurchasePlanResponse>>(`/api/purchase-plans/by-execution/${predictionExecutionId}`);
+        return data.data!;
+      }
+    }, 10 * 60_000);
   },
 
   async getById(id: string): Promise<PurchasePlanResponse> {
@@ -29,10 +39,10 @@ export const purchasePlanService = {
   },
 
   async getByExecution(executionId: string): Promise<PurchasePlanResponse> {
-    const { data } = await http.get<ApiResponse<PurchasePlanResponse>>(
-      `/api/purchase-plans/by-execution/${executionId}`
-    );
-    return data.data!;
+    return withCache(`plan:${executionId}`, async () => {
+      const { data } = await http.get<ApiResponse<PurchasePlanResponse>>(`/api/purchase-plans/by-execution/${executionId}`);
+      return data.data!;
+    }, 10 * 60_000);
   },
 
   async evaluate(
