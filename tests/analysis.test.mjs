@@ -74,15 +74,32 @@ test('late pages remain reachable with current page and last page controls', () 
   assert.match(markup, /105–112 de 160/);
 });
 
-test('weekly chart retains real historical totals without inventing confidence bounds', () => {
+test('daily chart retains individual observations without inventing confidence bounds', () => {
   const chart = transforms.buildChartFromBackendPoints([
     { date: '2026-11-09', predicted: 4, upper: null, lower: null },
     { date: '2026-11-10', predicted: 6, upper: null, lower: null },
   ], 30, [{ date: '2026-11-02', quantity: 3 }, { date: '2026-11-03', quantity: 7 }]);
-  assert.equal(chart[0].historical, 10);
-  assert.equal(chart[1].predicted, 10);
-  assert.equal(chart[1].upper, null);
-  assert.equal(chart[1].lower, null);
+  assert.equal(chart.length, 4);
+  assert.equal(chart[0].historical, 3);
+  assert.equal(chart[1].historical, 7);
+  assert.equal(chart[2].predicted, 4);
+  assert.equal(chart[3].predicted, 6);
+  assert.equal(chart[2].upper, null);
+  assert.equal(chart[2].lower, null);
+  assert.equal(chart[1].forecastAnchor, undefined); // Do not bridge a missing date range.
+});
+
+test('the visual join uses the last real day without changing the first forecast', () => {
+  const chart = transforms.buildChartFromBackendPoints([
+    { date: '2026-11-04', predicted: 99, upper: 100, lower: 98 },
+    { date: '2026-11-05', predicted: 2, upper: 3, lower: 1 },
+  ], 30, [{ date: '2026-11-04', quantity: 8 }]);
+  assert.equal(chart[0].predicted, null);
+  assert.equal(chart[0].forecastAnchor, 8);
+  assert.equal(chart[0].upper, null);
+  assert.equal(chart[1].predicted, 2);
+  assert.equal(chart[1].isoDate, '2026-11-05');
+  assert.equal(chart.reduce((sum, point) => sum + (point.predicted ?? 0), 0), 2);
 });
 
 test('priority ranking is execution-wide and agrees with dashboard volume bands', () => {
@@ -97,11 +114,13 @@ test('cache deduplicates requests and rejects writes from a previous account gen
   const fetcher = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
   const one = cache.withCache('test', fetcher);
   const two = cache.withCache('test', fetcher);
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls, 1);
   finish(42); await Promise.all([one, two]);
   assert.equal(await cache.withCache('test', fetcher), 42);
   assert.equal(calls, 1);
   const old = cache.withCache('old', fetcher);
+  await new Promise(resolve => setImmediate(resolve));
   cache.invalidateDashboardCache();
   finish(12); await old;
   assert.equal(cache.peekCache('old'), undefined);

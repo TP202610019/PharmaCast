@@ -9,6 +9,8 @@ import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 import { motion } from "motion/react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { dashboardService } from "../../services/dashboard.service";
+import { predictionService } from "../../services/prediction.service";
+import { peekCache } from "../../lib/dashboardCache";
 import { purchasePlanService } from "../../services/purchase-plan.service";
 import { datasetService } from "../../services/dataset.service";
 import type { DashboardSummaryResponse, PlanEvaluationResponse } from "../../types/api";
@@ -19,8 +21,8 @@ export function HistoryDetail() {
   const navigate = useNavigate();
 
   // ── Core data ──
-  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(() => peekCache<DashboardSummaryResponse>(`prediction-summary:${id}`) ?? null);
+  const [loading, setLoading] = useState(() => !peekCache(`prediction-summary:${id}`));
   const [error, setError] = useState("");
 
   // ── UI ──
@@ -56,21 +58,32 @@ export function HistoryDetail() {
   const [csvSampleNames, setCsvSampleNames] = useState<string[]>([]);
 
   // ── Load summary on mount ──
+  const loadVersion = useRef(0);
   const loadData = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
+    const version = ++loadVersion.current;
+    const cached = peekCache<DashboardSummaryResponse>(`prediction-summary:${id}`);
+    setSummary(cached ?? null);
+    setLoading(!cached);
     setError("");
+    // Start independent requests together, rather than waiting for the summary
+    // to mount the analysis component. Service caches deduplicate both callers.
+    void predictionService.getById(id).then(result => {
+      const first = [...new Set(result.forecastResults.map(row => row.productName))].sort((a, b) => a.localeCompare(b))[0];
+      if (first && loadVersion.current === version) void dashboardService.getChart(id, first).catch(() => {});
+    }).catch(() => {});
+    void purchasePlanService.getByExecution(id).catch(() => {});
     try {
       const summaryData = await dashboardService.getPredictionSummary(id);
-      setSummary(summaryData);
+      if (loadVersion.current === version) setSummary(summaryData);
     } catch (err) {
-      setError(extractApiErrorMessage(err, "No se pudo cargar la predicción."));
+      if (loadVersion.current === version && !cached) setError(extractApiErrorMessage(err, "No se pudo cargar la predicción."));
     } finally {
-      setLoading(false);
+      if (loadVersion.current === version) setLoading(false);
     }
   }, [id]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadData(); return () => { loadVersion.current++; }; }, [loadData]);
 
 
 

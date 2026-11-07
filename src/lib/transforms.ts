@@ -12,6 +12,8 @@ import { ExecutionStatus } from "../types/api";
 
 export interface ChartPoint {
   date: string;
+  isoDate?: string;
+  forecastAnchor?: number;
   weekRange?: string;
   historical: number | null;
   predicted: number | null;
@@ -144,36 +146,31 @@ export function buildChartFromBackendPoints(
   const pointFor = (value: string) => {
     const day = value.slice(0, 10);
     if (!days.has(day)) days.set(day, {
-      date: formatChartDate(day), historical: null, predicted: null, upper: null, lower: null,
+      date: formatChartDate(day), isoDate: day, historical: null, predicted: null, upper: null, lower: null,
     });
     return days.get(day)!;
   };
   for (const h of historicalPoints) pointFor(h.date).historical = h.quantity;
+  const lastHistoricalDay = [...days.keys()].sort().at(-1);
   for (const p of backendPoints) {
+    if (lastHistoricalDay && p.date.slice(0, 10) <= lastHistoricalDay) continue;
     const point = pointFor(p.date);
     point.predicted = p.predicted;
     point.upper = p.upper ?? null;
     point.lower = p.lower ?? null;
   }
-  const weeks = new Map<string, ChartPoint>();
-  for (const [day, point] of [...days.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const date = new Date(day + "T00:00:00Z");
-    date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
-    const key = date.toISOString().slice(0, 10);
-    const end = new Date(date);
-    end.setUTCDate(end.getUTCDate() + 6);
-    const format = (value: Date) => value.toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" });
-    if (!weeks.has(key)) weeks.set(key, {
-      date: `${format(date)}–${format(end)}`,
-      weekRange: `Semana del ${format(date)} al ${format(end)} · total semanal`,
-      historical: null, predicted: null, upper: null, lower: null,
-    });
-    const week = weeks.get(key)!;
-    for (const field of ["historical", "predicted", "upper", "lower"] as const) {
-      if (point[field] != null) week[field] = (week[field] ?? 0) + point[field]!;
+  const result = [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, point]) => point);
+  // This point only joins the paths; it is never an additional forecast observation.
+  const firstForecast = result.findIndex(point => point.predicted != null);
+  const anchor = result[firstForecast - 1];
+  if (anchor?.historical != null) {
+    const next = new Date(anchor.isoDate + "T00:00:00Z");
+    next.setUTCDate(next.getUTCDate() + 1);
+    if (next.toISOString().slice(0, 10) === result[firstForecast]?.isoDate) {
+      anchor.forecastAnchor = anchor.historical;
     }
   }
-  return [...weeks.values()];
+  return result;
 }
 
 

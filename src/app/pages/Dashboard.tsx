@@ -197,7 +197,7 @@ export function Dashboard() {
 
             <AnalysisTabs<"dashboard" | "purchase"> tabs={[{id:"dashboard",label:"Demanda",icon:BarChart3},{id:"purchase",label:"Plan de compras",icon:Package}]} active={activeTab} onChange={setActiveTab} />
 
-            <PredictionAnalysis key={summary.latestPredictionId!} executionId={summary.latestPredictionId!}
+            <PredictionAnalysis key={summary.latestPredictionId!} executionId={summary.latestPredictionId!} showPlanHeading={false}
               view={activeTab === "dashboard" ? "demand" : "purchase"}/>
           </motion.div>
         )}

@@ -42,9 +42,10 @@ function ChartTooltip({ active, payload }: any) {
 }
 
 /** Same saved execution, chart and tables in the wizard, history and dashboard. */
-export function PredictionAnalysis({ executionId, view, initialPrediction, initialPlan, onPlanReady, preparePlan }: {
+export function PredictionAnalysis({ executionId, view, initialPrediction, initialPlan, onPlanReady, preparePlan, showPlanHeading = true }: {
   executionId: string;
   view: "demand" | "purchase";
+  showPlanHeading?: boolean;
   initialPrediction?: PredictionResponse | null;
   initialPlan?: PurchasePlanResponse | null;
   onPlanReady?: (plan: PurchasePlanResponse) => void;
@@ -131,9 +132,11 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
   }, [products, search, priority, view]);
   const current = Math.min(page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
   const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const plot = chart.map((point, index) => ({ ...point, index, band: point.lower != null && point.upper != null ? [point.lower, point.upper] : null }));
+  const plot = chart.map((point, index) => ({ ...point, index, forecastLine: point.predicted ?? point.forecastAnchor ?? null, band: point.lower != null && point.upper != null ? [point.lower, point.upper] : null }));
   const hasBounds = chart.some(point => point.lower != null && point.upper != null);
   const start = chart.findIndex(point => point.predicted != null);
+  const boundary = start > 0 && chart[start - 1].forecastAnchor != null ? start - 1 : start;
+  const lastHistorical = [...chart].reverse().find(point => point.historical != null);
   const days = prediction?.forecastPeriod ?? 0;
   const total = products.reduce((sum, row) => sum + row.totalPredicted, 0);
   const accuracy = prediction ? extractAccuracy(prediction.metrics) : null;
@@ -154,7 +157,7 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
   if (!prediction) return <div className="analysis-inline-state" role="status"><Loader2 className="animate-spin" size={24}/><p>Cargando análisis…</p></div>;
 
   return <div className="prediction-analysis-surface shared-prediction-analysis">
-    {view === "purchase" && <header className="shared-plan-heading"><div><h2>Plan de compras recomendado</h2><p>Basado en la predicción para los próximos {days} días</p></div><div className="module-heading-actions">
+    {view === "purchase" && showPlanHeading && <header className="shared-plan-heading"><div><h2>Plan de compras recomendado</h2><p>Basado en la predicción para los próximos {days} días</p></div><div className="module-heading-actions">
       <button className="module-secondary" disabled={planLoading || !!planError} onClick={() => exportPlan("csv")}><Download size={16}/>Exportar CSV</button>
       <button className="module-primary" disabled={planLoading || !!planError} onClick={() => exportPlan("pdf")}><Download size={16}/>Exportar PDF</button>
     </div></header>}
@@ -181,7 +184,8 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
       <div className="shared-chart-heading"><div><button className="module-secondary" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(value => !value)}><PanelLeftOpen size={16}/>Medicamentos</button><h3 className="analysis-medication-title">{productName || "Sin medicamentos"}</h3></div>
         {hasBounds && <button className="shared-confidence" onClick={() => setConfidence(value => !value)}>{confidence ? "Ocultar" : "Mostrar"} intervalo de confianza</button>}
       </div>
-      <div className="shared-chart-legend"><span><i/>Histórico</span><span><i className="dashed"/>Predicción</span>{hasBounds && confidence && <span><i className="band"/>Intervalo de confianza</span>}<span className="shared-chart-period"><i className="boundary"/>Inicio predicción · Totales semanales</span></div>
+      <div className="shared-chart-legend"><span><i/>Histórico</span><span><i className="dashed"/>Predicción</span>{hasBounds && confidence && <span><i className="band"/>Intervalo de confianza</span>}<span className="shared-chart-period"><i className="boundary"/>Inicio predicción · Ventas diarias</span></div>
+      {lastHistorical && start >= 0 && <p className="shared-analysis-notice">Último dato real: {lastHistorical.date} · Pronóstico desde el {chart[start].date}</p>}
       <div className="shared-chart-plot">
         {chartLoading ? <div className="analysis-inline-state" role="status"><Loader2 className="animate-spin" size={24}/><p>Cargando gráfica…</p></div> : chartError ? <div className="analysis-inline-state" role="alert"><p>{chartError}</p><button className="module-secondary" onClick={() => setAttempt(value => value + 1)}>Reintentar</button></div> : !chart.length ? <div className="analysis-inline-state">No hay datos para este medicamento.</div> : <ResponsiveContainer width="100%" height={320}>
           <ComposedChart key={`${executionId}:${productName}`} data={plot} margin={{ top: 16, right: 18, left: 0, bottom: 12 }}>
@@ -190,10 +194,10 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
             <XAxis dataKey="index" tickFormatter={value => chart[Number(value)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} minTickGap={36} interval="preserveStartEnd" tickLine={false} axisLine={false}/>
             <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={42}/>
             <Tooltip content={<ChartTooltip/>}/>
-            {start >= 0 && <ReferenceLine x={start} stroke="#85858f" strokeDasharray="4 4"/>}
+            {boundary >= 0 && <ReferenceLine x={boundary} stroke="#85858f" strokeDasharray="4 4" label={{ value: "Inicio del pronóstico", position: "insideTopRight", fill: "#85858f", fontSize: 11 }}/>}
             {confidence && hasBounds && <Area dataKey="band" type="monotone" stroke="none" fill={`url(#${gradientId})`} isAnimationActive={false} connectNulls={false}/>}
-            <Line dataKey="historical" type="monotone" stroke="#007AFF" strokeWidth={2.5} dot={false} connectNulls={false} animationDuration={800}/>
-            <Line dataKey="predicted" type="monotone" stroke="#007AFF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} connectNulls={false} animationBegin={800} animationDuration={400}/>
+            <Line dataKey="historical" type="linear" stroke="#007AFF" strokeWidth={2.5} dot={false} connectNulls={false} animationDuration={800}/>
+            <Line dataKey="forecastLine" type="linear" stroke="#007AFF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} connectNulls={false} animationBegin={800} animationDuration={400}/>
           </ComposedChart>
         </ResponsiveContainer>}
       </div>

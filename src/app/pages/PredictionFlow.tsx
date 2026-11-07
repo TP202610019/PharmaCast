@@ -195,7 +195,7 @@ export function PredictionFlow() {
       if (detectedSalesCols.includes(field.datasetColumnName)) mapping[field.fieldKey] = field.datasetColumnName;
       else missing.push(field.datasetColumnName);
     });
-    setAppliedMappingId(null);
+    setAppliedMappingId(config.id);
     setSalesMapping(mapping);
     setMappingWarning(missing.length
       ? "Algunas columnas de esta configuración no están en el archivo. Revisa los campos sin asignar."
@@ -203,13 +203,13 @@ export function PredictionFlow() {
   };
 
   useEffect(() => {
-    if (currentStep !== 2 || savedMappingsLoading || !savedMappings.length || !primaryDatasetId || !detectedSalesCols.length ||
+    if (currentStep !== 2 || fieldCatalogLoading || !fieldCatalog.length || savedMappingsLoading || !savedMappings.length || !primaryDatasetId || !detectedSalesCols.length ||
         defaultAppliedFor.current === primaryDatasetId) return;
     defaultAppliedFor.current = primaryDatasetId;
     if (appliedMappingId || Object.keys(salesMapping).length > 0) return;
     const config = savedMappings.find((mapping) => mapping.isDefault);
     if (config) applySavedMapping(config);
-  }, [currentStep, savedMappingsLoading, savedMappings, primaryDatasetId, detectedSalesCols, appliedMappingId, salesMapping]);
+  }, [currentStep, savedMappingsLoading, savedMappings, primaryDatasetId, detectedSalesCols, appliedMappingId, salesMapping, fieldCatalogLoading, fieldCatalog]);
 
   /* ── File upload handler ── */
   const uploadFile = useCallback(
@@ -332,7 +332,7 @@ export function PredictionFlow() {
 
       try {
         // Resolve or create mapping config before triggering prediction
-        let resolvedMappingId: string | undefined = appliedMappingId ?? undefined;
+        let resolvedMappingId: string | undefined;
 
         const requiredCatalogFields = fieldCatalog.filter(
           (f) => f.isRequired && f.fieldType === "sales"
@@ -686,8 +686,9 @@ export function PredictionFlow() {
           {currentStep === 2 && (() => {
             const hasSales = files.some((f) => f.type === "sales");
             const hasInventory = files.some((f) => f.type === "inventory");
-            const salesCols = detectedSalesCols;
-            const invCols = detectedInvCols;
+            const sortColumns = (columns: string[]) => [...columns].sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
+            const salesCols = sortColumns(detectedSalesCols);
+            const invCols = sortColumns(detectedInvCols);
             const activeMapping = mappingTab === "sales" ? salesMapping : inventoryMapping;
             const setActiveMapping = mappingTab === "sales" ? setSalesMapping : setInventoryMapping;
             const salesCatalogFields = fieldCatalog.filter((f) => f.fieldType === "sales");
@@ -768,7 +769,7 @@ export function PredictionFlow() {
                           <SelectTrigger className="pc-config-select" aria-label="Configuración guardada"><SelectValue placeholder="Nueva configuración" /></SelectTrigger>
                           <SelectContent className="pc-select-menu" position="popper" align="start">
                             <SelectItem value="new">Nueva configuración</SelectItem>
-                            {savedMappings.map(m => <SelectItem key={m.id} value={m.id}>{m.isDefault ? "★ " : ""}{m.configurationName}</SelectItem>)}
+                            {[...savedMappings].sort((a, b) => a.configurationName.localeCompare(b.configurationName, "es", { numeric: true, sensitivity: "base" })).map(m => <SelectItem key={m.id} value={m.id}>{m.isDefault ? "★ " : ""}{m.configurationName}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         {appliedMappingId && (
@@ -888,7 +889,10 @@ export function PredictionFlow() {
                                     <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
                                   </div>
                                   <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                                    <Select value={val || "unassigned"} onValueChange={(value) => setActiveMapping((mapping) => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }))}>
+                                    <Select value={val || "unassigned"} onValueChange={(value) => {
+                                      setActiveMapping((mapping) => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }));
+                                      if (mappingTab === "sales") { setAppliedMappingId(null); setMappingWarning(""); }
+                                    }}>
                                       <SelectTrigger aria-label={v.label} className="pc-column-select"><SelectValue /></SelectTrigger>
                                       <SelectContent className="pc-select-menu" position="popper" align="start">
                                         <SelectItem value="unassigned">Seleccionar columna…</SelectItem>

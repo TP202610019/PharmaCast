@@ -1,3 +1,4 @@
+import { readPersistedAnalysis, persistAnalysis, clearPersistedAnalysis, invalidatePersistedLists } from "./persistentAnalysisCache";
 interface CacheEntry<T> { data: T; ts: number }
 const store = new Map<string, CacheEntry<unknown>>();
 const pending = new Map<string, Promise<unknown>>();
@@ -16,8 +17,17 @@ export function withCache<T>(key: string, fetcher: () => Promise<T>, staleMs = D
   if (running) return running as Promise<T>;
   const started = generation;
   const revision = revisions.get(key) ?? 0;
-  const request = fetcher().then(data => {
-    if (generation === started && (revisions.get(key) ?? 0) === revision) seedCache(key, data);
+  let restored = false;
+  const request = (async () => {
+    const saved = await readPersistedAnalysis<T>(key);
+    if (generation === started && (revisions.get(key) ?? 0) === revision && saved && Date.now() - saved.ts < staleMs) {
+      store.set(key, saved);
+      restored = true;
+      return saved.data;
+    }
+    return fetcher();
+  })().then(data => {
+    if (!restored && generation === started && (revisions.get(key) ?? 0) === revision) seedCache(key, data);
     return data;
   }).finally(() => { if (pending.get(key) === request) pending.delete(key); });
   pending.set(key, request);
@@ -29,16 +39,19 @@ export function invalidateDashboardCache(): void {
   store.clear();
   pending.clear();
   revisions.clear();
+  clearPersistedAnalysis();
 }
 
 export function seedCache<T>(key: string, data: T): void {
   store.set(key, { data, ts: Date.now() });
+  persistAnalysis(key, { data, ts: Date.now() });
   const family = key.startsWith("prediction:") ? "prediction:" : key.startsWith("chart:") ? "chart:" : null;
   const limit = family === "prediction:" ? 5 : 60;
   const keys = [...store.keys()].filter(value => !family || value.startsWith(family));
   for (const old of keys.slice(0, Math.max(0, keys.length - limit))) store.delete(old);
 }
 export function invalidateAnalysisLists(): void {
+  invalidatePersistedLists();
   for (const key of new Set([...store.keys(), ...pending.keys()])) {
     if (key === "metrics" || key === "summary" || key === "history" || key.startsWith("prediction-summary:")) {
       store.delete(key);
