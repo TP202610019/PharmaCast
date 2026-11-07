@@ -229,16 +229,6 @@ export function PredictionFlow() {
         setInventoryMapping({});
       }
       setFiles(prev => prev.filter(f => f.type !== type));
-      if (!/\.(csv|xls|xlsx)$/i.test(file.name)) {
-        setFiles(prev => [...prev, { name: file.name, size: file.size, type, uploadError: "Formato no permitido" }]);
-        setUploadError("Formato no permitido. Usa un archivo CSV, XLS o XLSX.");
-        return;
-      }
-      if (!file.size || file.size > 30 * 1024 * 1024) {
-        setFiles(prev => [...prev, { name: file.name, size: file.size, type, uploadError: "Tamaño no válido" }]);
-        setUploadError(!file.size ? "El archivo está vacío." : "El archivo supera el límite de 30 MB.");
-        return;
-      }
       setFiles(prev => [...prev, { name: file.name, size: file.size, type, validating: true, rawFile: file }]);
       try {
         const preview = await validateLocalDataset(file);
