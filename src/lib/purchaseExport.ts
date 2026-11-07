@@ -1,4 +1,6 @@
-import { dashboardService } from "../services/dashboard.service";
+import { predictionService } from "../services/prediction.service";
+import { purchasePlanService } from "../services/purchase-plan.service";
+import { forecastResultsToProducts } from "./transforms";
 export type PurchaseRow = {name:string; quantity:number; priority:string};
 const labels:Record<string,string>={critical:"Crítico",high:"Alto",medium:"Medio",low:"Bajo"};
 export const priorityRank:Record<string,number>={critical:0,high:1,medium:2,low:3};
@@ -29,5 +31,13 @@ export async function exportPurchase(format:"pdf"|"csv", rows:PurchaseRow[], day
  doc.save(`plan-compras-${reference}.pdf`);
 }
 export async function exportSavedPurchase(format:"pdf"|"csv",id:string,days:number){
- let page=1,rows:PurchaseRow[]=[];while(true){const result=await dashboardService.getProducts(id,page,100);rows.push(...result.items.map(p=>({name:p.productName,quantity:p.totalPredictedQuantity,priority:p.priority})));if(page*100>=result.totalCount||!result.items.length)break;page++;}await exportPurchase(format,rows,days,id.slice(0,8));
+ const [prediction, plan] = await Promise.all([
+  predictionService.getById(id),
+  purchasePlanService.getByExecution(id).catch(error => {
+   if (error.status === 404) return null;
+   throw error;
+  }),
+ ]);
+ const products = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics);
+ await exportPurchase(format, products.map(row => ({name:row.name,quantity:row.recommendedQty,priority:row.priority})), prediction.forecastPeriod, id.slice(0,8));
 }

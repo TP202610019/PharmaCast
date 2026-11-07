@@ -220,3 +220,7 @@
 
 .ps-uploaded-preview .ps-uploaded-meta { margin-left:auto; align-self:center; flex-shrink:0; color:#85858f; font-size:10px; line-height:1.5; white-space:nowrap; }
 .ps-uploaded-preview .ps-uploaded-details { min-width:0; }
+
+.ps-pipeline > .ps-panel-label{font-size:1.125rem;font-weight:600;color:#1d1d1f}
+
+.ps-detected-columns{margin-top:24px}.ps-column-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.ps-column-chips span{padding:5px 9px;border:1px solid #dedee7;border-radius:10px;font-size:11px;color:#6e6e73}.ps-column-chips .is-mapped{background:#e5f1ff;color:#0069d9;border-color:#9bc5ff;font-weight:600}

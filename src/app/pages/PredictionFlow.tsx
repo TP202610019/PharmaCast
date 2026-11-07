@@ -1,65 +1,21 @@
+import { validateLocalDataset } from "../../lib/validateLocalDataset";
+import { PredictionAnalysis } from "../components/PredictionAnalysis";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { Switch } from "../components/ui/switch";
 import { useAuth } from "../context/AuthContext";
-import { exportPurchase, priorityRank } from "../../lib/purchaseExport";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
 import { clearPredictionDraft, usePredictionDraft } from "../hooks/usePredictionDraft";
-import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
+import { AnalysisMetrics } from "../components/AnalysisLayout";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useBlocker, useNavigate } from "react-router";
 import { createPortal } from "react-dom";
-import {
-  Upload,
-  Settings,
-  BarChart3,
-  ShoppingCart,
-  CheckCircle,
-  ChevronRight,
-  ChevronLeft,
-  ChevronDown,
-  FileText,
-  X,
-  AlertCircle,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Package,
-  Download,
-  Calendar,
-  Clock,
-  Save,
-  Activity,
-  Search,
-  PanelLeftOpen,
-  PanelLeftClose,
-  Loader2,
-  BookOpen,
-} from "lucide-react";
-import {
-  ComposedChart,
-  Line,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
+import { Upload, Settings, BarChart3, ShoppingCart, CheckCircle, ChevronRight, ChevronLeft, X, AlertCircle, TrendingUp, Package, Calendar, Clock, Activity, Loader2, BookOpen } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { datasetService } from "../../services/dataset.service";
 import { mappingService, mappingFieldService } from "../../services/mapping.service";
 import { predictionService } from "../../services/prediction.service";
-import { dashboardService } from "../../services/dashboard.service";
 import { purchasePlanService } from "../../services/purchase-plan.service";
-import {
-  forecastResultsToProducts,
-  buildProductChartData,
-  buildChartFromBackendPoints,
-  extractAccuracy,
-  type UIProduct,
-  type ChartPoint,
-} from "../../lib/transforms";
+import { forecastResultsToProducts, extractAccuracy, type UIProduct } from "../../lib/transforms";
 import type { PredictionResponse, PurchasePlanResponse, MappingFieldResponse } from "../../types/api";
 import { ExecutionStatus } from "../../types/api";
 import { extractApiErrorMessage } from "../context/AuthContext";
@@ -75,23 +31,6 @@ const STEPS = [
   { id: 5, label: "Plan de compras", icon: ShoppingCart },
 ];
 
-const priorityConfig = {
-  critical: { label: "Crítico", color: "text-red-500", bg: "bg-red-500/10", border: "border-red-500/30", dot: "bg-red-500" },
-  high:     { label: "Alto",    color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30", dot: "bg-orange-500" },
-  medium:   { label: "Medio",   color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/30", dot: "bg-yellow-500" },
-  low:      { label: "Bajo",    color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/30", dot: "bg-blue-500" },
-};
-
-const ANALYSIS_STEPS_LABELS = [
-  "Cargando y validando datos...",
-  "Normalizando formato de fechas...",
-  "Calculando estadísticas descriptivas...",
-  "Entrenando modelo de predicción...",
-  "Generando proyecciones de demanda...",
-  "Calculando recomendaciones de compra...",
-  "Finalizando análisis...",
-];
-
 const PIPELINE_STEPS = [
   { label: "Carga de datos",             description: "Leyendo archivos de ventas e inventario",             icon: Upload },
   { label: "Preprocesamiento",           description: "Limpiando valores atípicos y normalizando registros", icon: Settings },
@@ -101,12 +40,6 @@ const PIPELINE_STEPS = [
   { label: "Plan de compras",            description: "Calculando recomendaciones de reabastecimiento",     icon: ShoppingCart },
 ];
 
-const PAGE_SIZE_TABLE = 10;
-const PAGE_SIZE_PLAN = 10;
-
-/* ── Variable definitions for Step 2 mapping ── */
-const FALLBACK_SALES_COLS = ["fecha_venta","nombre_producto","cant_vendida","precio_unit","categoria","tipo_prod","unidad_med","metodo_pago","pct_descuento"];
-const FALLBACK_INV_COLS   = ["nombre_med","stock_actual","fecha_venc","stock_min","stock_seguridad","num_lote","costo_unit","estado_prod"];
 
 // Field catalog is loaded dynamically from GET /api/mapping-fields.
 // Each field carries fieldType: "sales" | "inventory" — no hardcoded key sets needed.
@@ -118,145 +51,20 @@ interface UploadedFile {
   type: "sales" | "inventory";
   rows?: number;
   uploading?: boolean;
+  validating?: boolean;
+  validated?: boolean;
+  serverHeadersValidated?: boolean;
   uploadError?: string;
   datasetId?: string;
   rawFile?: File;
 }
 
-/* ── Utilities ── */
-function detectCsvDelimiter(line: string): string {
-  const candidates = [",", ";", "\t"];
-  let best = ",";
-  let bestCount = 0;
-  for (const d of candidates) {
-    let count = 0;
-    let inQuote = false;
-    for (const c of line) {
-      if (c === '"') inQuote = !inQuote;
-      else if (!inQuote && c === d) count++;
-    }
-    if (count > bestCount) { bestCount = count; best = d; }
-  }
-  return best;
-}
-
-function splitCsvLine(line: string, delimiter: string): string[] {
-  const fields: string[] = [];
-  let current = "";
-  let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (inQuote && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuote = !inQuote;
-    } else if (c === delimiter && !inQuote) {
-      fields.push(current); current = "";
-    } else {
-      current += c;
-    }
-  }
-  fields.push(current);
-  return fields;
-}
-
-const parseCsvHeaders = (file: File): Promise<string[]> =>
-  new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const raw = (e.target?.result as string) ?? "";
-      // Strip UTF-8 BOM (U+FEFF) — FileReader.readAsText preserves it unlike TextDecoder
-      const text = raw.replace(/^﻿/, "");
-      const firstLine = text.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
-      if (!firstLine) { resolve([]); return; }
-      const delimiter = detectCsvDelimiter(firstLine);
-      const headers = splitCsvLine(firstLine, delimiter)
-        .map((h) => h.trim().replace(/^"|"$/g, ""))
-        .filter(Boolean);
-      resolve(headers);
-    };
-    reader.onerror = () => resolve([]);
-    reader.readAsText(file, "utf-8");
-  });
-
-/* ── Tooltip ── */
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const filtered = payload.filter((p: any) => p.value != null && p.name !== "upper" && p.name !== "lower");
-    if (!filtered.length) return null;
-    return (
-      <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-        <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>{payload?.[0]?.payload?.weekRange ?? payload?.[0]?.payload?.date ?? label}</p>
-        {filtered.map((p: any) => (
-          <div key={p.name} className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.name === "historical" ? "#007AFF" : "#007AFF" }} />
-              <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>
-                {p.name === "historical" ? "Histórico" : "Predicción"}
-              </span>
-            </div>
-            <span style={{ color: p.name === "historical" ? "#007AFF" : "#007AFF", fontSize: "0.875rem", fontWeight: 700 }}>
-              {Number(p.value).toLocaleString("es-PE", { maximumFractionDigits: 2 })} uds
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
-
-/* ── Paginator ── */
-function Paginator({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
-
-  // Build page list with ellipsis: always show first, last, current ±1
-  const pages: (number | "...")[] = [];
-  const delta = 1;
-  const range: number[] = [];
-  for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) range.push(i);
-  pages.push(1);
-  if (range[0] > 2) pages.push("...");
-  pages.push(...range);
-  if (range[range.length - 1] < totalPages - 1) pages.push("...");
-  if (totalPages > 1) pages.push(totalPages);
-
-  const btnBase = "flex h-7 min-w-[1.75rem] items-center justify-center rounded-lg border px-1 transition-all";
-
-  return (
-    <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
-      <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
-        {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} de {total}
-      </p>
-      <div className="flex items-center gap-1">
-        <button onClick={() => onChange(page - 1)} disabled={page === 1}
-          className={`${btnBase} border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed`}>
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </button>
-        {pages.map((p, i) =>
-          p === "..." ? (
-            <span key={`ellipsis-${i}`} className="px-1 text-gray-400" style={{ fontSize: "0.75rem" }}>…</span>
-          ) : (
-            <button key={p} onClick={() => onChange(p as number)}
-              className={`${btnBase} ${p === page ? "border-blue-500 bg-blue-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
-              style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
-              {p}
-            </button>
-          )
-        )}
-        <button onClick={() => onChange(page + 1)} disabled={page === totalPages}
-          className={`${btnBase} border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed`}>
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── Main Component ── */
 export function PredictionFlow() {
   const navigate = useNavigate();
   const { isLoggedIn, user } = useAuth();
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const uploadLock = useRef(false);
+  const uploadVersions = useRef({ sales: 0, inventory: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const salesInputRef = useRef<HTMLInputElement>(null);
   const inventoryInputRef = useRef<HTMLInputElement>(null);
@@ -283,7 +91,6 @@ export function PredictionFlow() {
     return () => window.clearInterval(timer);
   }, [analysisStatus]);
   const [completedStepIdx, setCompletedStepIdx] = useState(-1);
-  const [filterPriority, setFilterPriority] = useState<string>("all");
 
   /* ── Step 2 variable mapping ── */
   const [mappingTab, setMappingTab] = useState<"sales" | "inventory">("sales");
@@ -303,24 +110,12 @@ export function PredictionFlow() {
   const [mappingName, setMappingName] = usePredictionDraft("mappingName", "");
   const [saveAsDefault, setSaveAsDefault] = usePredictionDraft("saveAsDefault", false);
 
-  /* ── Step 4 UI state ── */
-  const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [showConfidence, setShowConfidence] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarSearch, setSidebarSearch] = useState("");
-  const [resultsTablePage, setResultsTablePage] = useState(1);
-  const [resultsSearch, setResultsSearch] = useState("");
-  const [planTablePage, setPlanTablePage] = useState(1);
-  const [planSearch, setPlanSearch] = useState("");
-
-
   /* ── API state ── */
   const [primaryDatasetId, setPrimaryDatasetId] = usePredictionDraft<string | null>("primaryDatasetId", null);
   const [prediction, setPrediction] = usePredictionDraft<PredictionResponse | null>("prediction", null);
   const [purchasePlan, setPurchasePlan] = usePredictionDraft<PurchasePlanResponse | null>("purchasePlan", null);
   const [uploadError, setUploadError] = useState<string>("");
   const [analysisError, setAnalysisError] = useState<string>("");
-  const [savingPlan, setSavingPlan] = useState(false);
 
   const finishing = useRef(false);
   useEffect(() => {
@@ -371,20 +166,6 @@ export function PredictionFlow() {
       ? extractAccuracy(prediction!.metrics) : null;
   }, [prediction]);
   const recordCount = files.reduce((sum, file) => sum + (file.rows || 0), 0);
-  const totalUnits = useMemo(() => products.reduce((s, p) => s + p.totalPredicted, 0), [products]);
-
-  /* ── Init selected product when products load ── */
-  useEffect(() => {
-    if (products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
-    }
-  }, [products, selectedProductId]);
-
-  /* ── Purchase plan generation is intentionally skipped in forecast-only mode ──
-   * No inventory data exists yet (sales dataset only), so POST /api/purchase-plans
-   * must not be called automatically. Step 5 derives its table from forecastResults
-   * already held in `prediction` — no DB round-trip needed.
-   * Wire purchasePlanService.generate() here only when inventory data is uploaded. ── */
 
   /* ── Load field catalog + saved mappings when entering step 2 ── */
   useEffect(() => {
@@ -410,10 +191,11 @@ export function PredictionFlow() {
     const mapping: Record<string, string> = {};
     const missing: string[] = [];
     config.fields.forEach((field) => {
+      if (!fieldCatalog.some(f => f.fieldType === "sales" && f.isRequired && f.fieldKey === field.fieldKey)) return;
       if (detectedSalesCols.includes(field.datasetColumnName)) mapping[field.fieldKey] = field.datasetColumnName;
       else missing.push(field.datasetColumnName);
     });
-    setAppliedMappingId(config.id);
+    setAppliedMappingId(null);
     setSalesMapping(mapping);
     setMappingWarning(missing.length
       ? "Algunas columnas de esta configuración no están en el archivo. Revisa los campos sin asignar."
@@ -432,12 +214,13 @@ export function PredictionFlow() {
   /* ── File upload handler ── */
   const uploadFile = useCallback(
     async (file: File, type: "sales" | "inventory") => {
-      console.log("[PredictionFlow] uploadFile() — name:", file.name, "type:", type, "size:", file.size);
-
-      // Reset detected columns immediately so Step 2 never shows headers from a previous file
+      if (uploadLock.current) return;
+      const version = ++uploadVersions.current[type];
+      const isCurrent = () => uploadVersions.current[type] === version;
+      setUploadError("");
       if (type === "sales") {
+        setPrimaryDatasetId(null);
         setDetectedSalesCols([]);
-        // Also clear any previously applied mapping because column names may differ in the new file
         setAppliedMappingId(null);
         setSalesMapping({});
         setMappingName("");
@@ -445,57 +228,29 @@ export function PredictionFlow() {
         setDetectedInvCols([]);
         setInventoryMapping({});
       }
-
-      const tempEntry: UploadedFile = { name: file.name, size: file.size, type, uploading: true, rawFile: file };
-      setFiles((prev) => [...prev.filter((f) => f.type !== type), tempEntry]);
-
-      // Parse CSV headers client-side (fast, no round-trip; always replace, even if empty)
-      const lcName = file.name.toLowerCase();
-      if (lcName.endsWith(".csv")) {
-        const cols = await parseCsvHeaders(file);
-        console.log("[PredictionFlow] CSV headers parsed client-side:", cols);
-        if (type === "sales") setDetectedSalesCols(cols);
-        else setDetectedInvCols(cols);
+      setFiles(prev => prev.filter(f => f.type !== type));
+      if (!/\.(csv|xls|xlsx)$/i.test(file.name)) {
+        setFiles(prev => [...prev, { name: file.name, size: file.size, type, uploadError: "Formato no permitido" }]);
+        setUploadError("Formato no permitido. Usa un archivo CSV, XLS o XLSX.");
+        return;
       }
-
+      if (!file.size || file.size > 30 * 1024 * 1024) {
+        setFiles(prev => [...prev, { name: file.name, size: file.size, type, uploadError: "Tamaño no válido" }]);
+        setUploadError(!file.size ? "El archivo está vacío." : "El archivo supera el límite de 30 MB.");
+        return;
+      }
+      setFiles(prev => [...prev, { name: file.name, size: file.size, type, validating: true, rawFile: file }]);
       try {
-        console.log("[PredictionFlow] POST /api/datasets/upload — sending file to backend...");
-        const dataset = await datasetService.upload(file);
-        console.log("[PredictionFlow] Upload response — datasetId:", dataset.id, "rowsCount:", dataset.rowsCount, "stage:", dataset.datasetStage);
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.name === file.name
-              ? { ...f, uploading: false, rows: dataset.rowsCount ?? undefined, datasetId: dataset.id }
-              : f
-          )
-        );
-        // Always update primaryDatasetId for sales uploads — replacing a file must update the reference
-        if (type === "sales") {
-          setPrimaryDatasetId(dataset.id);
-        }
-        setUploadError("");
-
-        // For Excel/XLS files fetch headers from the backend after the file is stored
-        // (the backend guarantees dataset.id maps to the file just uploaded — unique GUID path)
-        if (!lcName.endsWith(".csv")) {
-          try {
-            console.log("[PredictionFlow] GET /api/datasets/" + dataset.id + "/headers — extracting Excel headers...");
-            const headers = await datasetService.getHeaders(dataset.id);
-            console.log("[PredictionFlow] Excel headers from backend:", headers);
-            // Always set (even if empty) so stale state is never left behind
-            if (type === "sales") setDetectedSalesCols(headers);
-            else setDetectedInvCols(headers);
-          } catch {
-            console.warn("[PredictionFlow] getHeaders() failed — Step 2 will show fallback column suggestions");
-          }
-        }
+        const preview = await validateLocalDataset(file);
+        if (!isCurrent()) return;
+        if (type === "sales") setDetectedSalesCols(preview.headers);
+        else setDetectedInvCols(preview.headers);
+        setFiles(prev => prev.map(f => f.type === type
+          ? { ...f, validating: false, validated: true, rows: preview.rows } : f));
       } catch (err) {
-        const msg = extractApiErrorMessage(err, "Error al cargar el archivo.");
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.name === file.name ? { ...f, uploading: false, uploadError: msg } : f
-          )
-        );
+        if (!isCurrent()) return;
+        const msg = err instanceof Error ? err.message : "No se pudo validar el archivo.";
+        setFiles(prev => prev.map(f => f.type === type ? { ...f, validating: false, validated: false, rawFile: undefined, uploadError: msg } : f));
         setUploadError(msg);
       }
     },
@@ -513,10 +268,7 @@ export function PredictionFlow() {
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
-      const droppedFiles = Array.from(e.dataTransfer.files).filter((f) => {
-        const n = f.name.toLowerCase();
-        return n.endsWith(".csv") || n.endsWith(".xlsx") || n.endsWith(".xls");
-      });
+      const droppedFiles = Array.from(e.dataTransfer.files);
       droppedFiles.forEach((file, i) => {
         uploadFile(file, detectFileType(file.name, i));
       });
@@ -535,26 +287,11 @@ export function PredictionFlow() {
     [uploadFile]
   );
 
-  const addDemoFile = (type: "sales" | "inventory") => {
-    const name = type === "sales" ? "ventas_abril_2026.csv" : "inventario_mayo_2026.xlsx";
-    setFiles((prev) => [
-      ...prev.filter((f) => f.type !== type),
-      { name, size: 45230, type, rows: type === "sales" ? 487 : 312 },
-    ]);
-    if (type === "sales") {
-      setDetectedSalesCols(FALLBACK_SALES_COLS);
-      // Demo files have no backend ID — clear any real primaryDatasetId so the flow uses demo mode
-      setPrimaryDatasetId(null);
-      setAppliedMappingId(null);
-      setSalesMapping({});
-    } else {
-      setDetectedInvCols(FALLBACK_INV_COLS);
-      setInventoryMapping({});
-    }
-  };
-
   const removeFile = (name: string) => {
+    if (uploadLock.current) return;
     const f = files.find((x) => x.name === name);
+    if (f) uploadVersions.current[f.type]++;
+    setUploadError("");
     setFiles((prev) => prev.filter((x) => x.name !== name));
     if (f?.type === "sales") {
       if (f.datasetId === primaryDatasetId) setPrimaryDatasetId(null);
@@ -573,6 +310,7 @@ export function PredictionFlow() {
     setAnalysisSeconds(0);
     setCompletedStepIdx(-1);
     setAnalysisError("");
+    setPurchasePlan(null);
 
     const total = PIPELINE_STEPS.length;
 
@@ -609,7 +347,7 @@ export function PredictionFlow() {
 
           // Build field entries from current salesMapping
           const fieldEntries = Object.entries(salesMapping)
-            .filter(([, col]) => col)
+            .filter(([key, col]) => col && requiredCatalogFields.some(f => f.fieldKey === key))
             .map(([fieldKey, datasetColumnName]) => ({ fieldKey, datasetColumnName }));
 
           // Reuse an existing mapping when the field configuration already matches
@@ -650,7 +388,12 @@ export function PredictionFlow() {
 
         sessionStorage.setItem(`prediction-draft:${user?.email ?? "guest"}:prediction`, JSON.stringify({ id: result.id }));
         setPrediction(result);
-        // Confirm remaining stages briefly, then reserve the last 6% for the purchase plan.
+        const invDatasetId = files.find(f => f.type === "inventory")?.datasetId;
+        purchasePlanService.generate(result.id, undefined, invDatasetId,
+          invDatasetId && Object.keys(inventoryMapping).length ? inventoryMapping : undefined)
+          .then(plan => { if (!finishing.current) setPurchasePlan(plan); })
+          .catch(() => { /* The shared plan view offers an explicit retry; prediction remains saved. */ });
+        // Finish the visual sequence; the saved plan continues in the background.
         for (let stage = visualStage; stage < 4; stage++) {
           setCompletedStepIdx(stage);
           await new Promise(resolve => window.setTimeout(resolve, 300));
@@ -658,7 +401,6 @@ export function PredictionFlow() {
         setCompletedStepIdx(3);
         await new Promise(resolve => window.setTimeout(resolve, 700));
         setCompletedStepIdx(4);
-        await new Promise(resolve => window.setTimeout(resolve, 5000));
         setCompletedStepIdx(total - 1);
         setAnalysisStatus("done");
       } catch (err) {
@@ -667,22 +409,10 @@ export function PredictionFlow() {
         setAnalysisStatus("error");
       }
     } else {
-      // Demo mode — mock timer
-      let idx = 0;
-      const interval = setInterval(() => {
-        if (idx < total) {
-          setCompletedStepIdx(idx - 1);
-
-          idx++;
-        } else {
-          clearInterval(interval);
-          setCompletedStepIdx(total - 1);
-
-          setAnalysisStatus("done");
-        }
-      }, 680);
+      setAnalysisError("Carga un archivo de ventas válido antes de ejecutar el análisis.");
+      setAnalysisStatus("error");
     }
-  }, [primaryDatasetId, forecastDays, files, salesMapping, appliedMappingId, mappingName, saveAsDefault, fieldCatalog, user?.email]);
+  }, [primaryDatasetId, forecastDays, files, salesMapping, appliedMappingId, mappingName, saveAsDefault, fieldCatalog, inventoryMapping, user?.email]);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -692,11 +422,18 @@ export function PredictionFlow() {
 
   const canProceed = () => {
     if (currentStep === 3) return analysisStatus === "done";
-    if (currentStep === 1) return files.length >= 1 && !files.some((f) => f.uploading);
+    if (currentStep === 1) return !uploadingFiles && files.some(f => f.type === "sales") && files.every(f => !f.validating && !f.uploading && !f.uploadError && (!!f.datasetId || (f.validated && !!f.rawFile)));
     if (currentStep === 2) {
-      const hasSales = files.some((f) => f.type === "sales");
-      const salesRequiredFields = fieldCatalog.filter((f) => f.fieldType === "sales" && f.isRequired);
-      if (hasSales && salesRequiredFields.length > 0 && !salesRequiredFields.every((f) => salesMapping[f.fieldKey])) return false;
+      if (!primaryDatasetId || !detectedSalesCols.length || fieldCatalogLoading || !fieldCatalog.length || ![30, 60, 90].includes(forecastDays)) return false;
+      if (files.some(f => f.uploading || f.uploadError || !f.datasetId)) return false;
+      for (const type of ["sales", "inventory"] as const) {
+        if (!files.some(f => f.type === type)) continue;
+        const columns = type === "sales" ? detectedSalesCols : detectedInvCols;
+        const mapping = type === "sales" ? salesMapping : inventoryMapping;
+        const required = fieldCatalog.filter(f => f.fieldType === type && f.isRequired);
+        const values = required.map(f => mapping[f.fieldKey]);
+        if (!required.length || values.some(v => !v || !columns.includes(v)) || new Set(values).size !== values.length) return false;
+      }
       return true;
     }
     return true;
@@ -706,7 +443,42 @@ export function PredictionFlow() {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (uploadLock.current || !canProceed()) return;
+    if (currentStep === 1) {
+      uploadLock.current = true;
+      setUploadingFiles(true);
+      setUploadError("");
+      try {
+        for (const entry of files) {
+          if (entry.datasetId && entry.serverHeadersValidated !== false) continue;
+          if (!entry.datasetId && (!entry.rawFile || !entry.validated)) throw new Error("Vuelve a seleccionar el archivo para continuar.");
+          setFiles(prev => prev.map(f => f.type === entry.type ? { ...f, uploading: true } : f));
+          try {
+            const dataset = entry.datasetId ? { id: entry.datasetId, rowsCount: entry.rows } : await datasetService.upload(entry.rawFile!);
+            // Retain successful uploads on retry; never upload the same selection twice.
+            setFiles(prev => prev.map(f => f.type === entry.type ? { ...f, datasetId: dataset.id, serverHeadersValidated: false, rows: dataset.rowsCount ?? f.rows, uploading: false } : f));
+            if (entry.type === "sales") setPrimaryDatasetId(dataset.id);
+            const headers = await datasetService.getHeaders(dataset.id);
+            if (!headers.length) throw new Error("No se encontraron encabezados válidos en la primera fila.");
+            if (entry.type === "sales") setDetectedSalesCols(headers);
+            else setDetectedInvCols(headers);
+            setFiles(prev => prev.map(f => f.type === entry.type ? { ...f, serverHeadersValidated: true } : f));
+          } catch (error) {
+            // Keep an accepted upload for a header-request retry; do not duplicate it.
+            setFiles(prev => prev.map(f => f.type === entry.type ? { ...f, uploading: false } : f));
+            throw error;
+          }
+        }
+        setCurrentStep(2);
+      } catch (error) {
+        setUploadError(extractApiErrorMessage(error, "No se pudieron subir los archivos. Intenta nuevamente."));
+      } finally {
+        uploadLock.current = false;
+        setUploadingFiles(false);
+      }
+      return;
+    }
     if (currentStep === 2) {
       setCurrentStep(3);
       runAnalysis();
@@ -716,86 +488,9 @@ export function PredictionFlow() {
   };
 
   const nextLabel =
-    currentStep === 2 ? "Ejecutar análisis"
+    uploadingFiles ? "Subiendo…" : currentStep === 2 ? "Ejecutar análisis"
     : currentStep === 4 ? "Ver plan de compras"
     : "Siguiente";
-
-  /* ── Step 4 derived data ── */
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === selectedProductId) ?? products[0],
-    [products, selectedProductId]
-  );
-
-  const [productChartData, setProductChartData] = useState<ChartPoint[]>([]);
-  useEffect(() => {
-    let active = true;
-    setProductChartData(prediction && selectedProduct
-      ? buildProductChartData(selectedProduct.name, prediction.forecastResults, forecastDays) : []);
-    if (prediction && selectedProduct) {
-      dashboardService.getChart(prediction.id, selectedProduct.name)
-        .then((response) => {
-          if (active) setProductChartData(buildChartFromBackendPoints(response.points, forecastDays, response.historicalPoints));
-        })
-        .catch((error) => console.error("No se pudo cargar el histórico diario", error));
-    }
-    return () => { active = false; };
-  }, [prediction, selectedProduct, forecastDays]);
-
-  const bridgeDateLabel = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-  }, []);
-
-  const tableData = useMemo(() =>
-    products.map((p) => ({
-      ...p,
-      avgHistorical: p.historicalAvg,
-      variation: prediction?.productSummaries?.find((s) => s.productName === p.name)?.variationPercent ?? null,
-    })),
-    [products, prediction]
-  );
-
-  const sidebarProducts = useMemo(() =>
-    products.filter((p) =>
-      sidebarSearch === "" ||
-      p.name.toLowerCase().includes(sidebarSearch.toLowerCase())
-    ),
-    [products, sidebarSearch]
-  );
-
-  const searchedTableData = useMemo(() =>
-    tableData.filter((p) =>
-      resultsSearch === "" ||
-      p.name.toLowerCase().includes(resultsSearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(resultsSearch.toLowerCase())
-    ),
-    [tableData, resultsSearch]
-  );
-
-  const paginatedTableData = searchedTableData.slice(
-    (resultsTablePage - 1) * PAGE_SIZE_TABLE,
-    resultsTablePage * PAGE_SIZE_TABLE
-  );
-
-  const filteredPlanProducts = useMemo(() =>
-    [...products].sort((a,b)=>priorityRank[a.priority]-priorityRank[b.priority]).filter(p=>filterPriority === "all" || p.priority === filterPriority),
-    [products, filterPriority]
-  );
-
-  const searchedPlanProducts = useMemo(() =>
-    filteredPlanProducts.filter((p) =>
-      planSearch === "" ||
-      p.name.toLowerCase().includes(planSearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(planSearch.toLowerCase())
-    ),
-    [filteredPlanProducts, planSearch]
-  );
-
-  const paginatedPlanProducts = searchedPlanProducts.slice(
-    (planTablePage - 1) * PAGE_SIZE_PLAN,
-    planTablePage * PAGE_SIZE_PLAN
-  );
 
   if (restoringPrediction) return <WorkspaceLoading label="Recuperando resultados…" />;
   if (restoreError) return <div role="alert" className="mx-auto max-w-xl px-6 py-16 text-center text-sm text-red-600">{restoreError}</div>;
@@ -873,7 +568,7 @@ export function PredictionFlow() {
                       >
                         <div className="flex flex-col items-center gap-3 text-center">
                           <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${salesFile ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}>
-                            {salesFile ? <CheckCircle className="h-5 w-5 text-blue-500" /> : <Upload className="h-5 w-5 text-gray-400" />}
+                            {(salesFile?.validated || salesFile?.datasetId) && !salesFile?.uploadError ? <CheckCircle className="h-5 w-5 text-blue-500" /> : <Upload className="h-5 w-5 text-gray-400" />}
                           </div>
                           <div>
                             <p className="text-gray-900" style={{ fontWeight: 600, fontSize: "0.875rem" }}>Datos de ventas <span className="text-red-400">*</span></p>
@@ -900,7 +595,7 @@ export function PredictionFlow() {
                           {salesFile && (
                             <p className="text-gray-400" style={{ fontSize: "0.7rem" }}>
                               {formatSize(salesFile.size)}{salesFile.rows != null && ` · ${salesFile.rows.toLocaleString()} filas`}
-                              {salesFile.uploading && " · Subiendo…"}{salesFile.datasetId && " · ✓ Subido"}
+                              {salesFile.validating && " · Validando…"}{salesFile.validated && !salesFile.datasetId && !salesFile.uploading && " · Listo para subir"}{salesFile.uploading && " · Subiendo…"}{salesFile.datasetId && !salesFile.uploadError && " · Subido"}{salesFile.uploadError && " · No válido"}
                             </p>
                           )}
                         </div>
@@ -920,7 +615,7 @@ export function PredictionFlow() {
                       >
                         <div className="flex flex-col items-center gap-3 text-center">
                           <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${invFile ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}>
-                            {invFile ? <CheckCircle className="h-5 w-5 text-blue-500" /> : <Package className="h-5 w-5 text-gray-400" />}
+                            {(invFile?.validated || invFile?.datasetId) && !invFile?.uploadError ? <CheckCircle className="h-5 w-5 text-blue-500" /> : <Package className="h-5 w-5 text-gray-400" />}
                           </div>
                           <div>
                             <p className="text-gray-900" style={{ fontWeight: 600, fontSize: "0.875rem" }}>Registro de inventario <span className="text-gray-400" style={{ fontWeight: 400, fontSize: "0.75rem" }}>(opcional)</span></p>
@@ -947,7 +642,7 @@ export function PredictionFlow() {
                           {invFile && (
                             <p className="text-gray-400" style={{ fontSize: "0.7rem" }}>
                               {formatSize(invFile.size)}{invFile.rows != null && ` · ${invFile.rows.toLocaleString()} filas`}
-                              {invFile.uploading && " · Subiendo…"}{invFile.datasetId && " · ✓ Subido"}
+                              {invFile.validating && " · Validando…"}{invFile.validated && !invFile.datasetId && !invFile.uploading && " · Listo para subir"}{invFile.uploading && " · Subiendo…"}{invFile.datasetId && !invFile.uploadError && " · Subido"}{invFile.uploadError && " · No válido"}
                             </p>
                           )}
                         </div>
@@ -991,14 +686,13 @@ export function PredictionFlow() {
           {currentStep === 2 && (() => {
             const hasSales = files.some((f) => f.type === "sales");
             const hasInventory = files.some((f) => f.type === "inventory");
-            const salesCols = detectedSalesCols.length ? detectedSalesCols : hasSales ? FALLBACK_SALES_COLS : [];
-            const invCols = detectedInvCols.length ? detectedInvCols : hasInventory ? FALLBACK_INV_COLS : [];
+            const salesCols = detectedSalesCols;
+            const invCols = detectedInvCols;
             const activeMapping = mappingTab === "sales" ? salesMapping : inventoryMapping;
             const setActiveMapping = mappingTab === "sales" ? setSalesMapping : setInventoryMapping;
             const salesCatalogFields = fieldCatalog.filter((f) => f.fieldType === "sales");
             const invCatalogFields   = fieldCatalog.filter((f) => f.fieldType === "inventory");
             const activeReqVars = (mappingTab === "sales" ? salesCatalogFields : invCatalogFields).filter((f) => f.isRequired).map((f) => ({ key: f.fieldKey, label: f.displayName, desc: "" }));
-            const activeOptVars = (mappingTab === "sales" ? salesCatalogFields : invCatalogFields).filter((f) => !f.isRequired).map((f) => ({ key: f.fieldKey, label: f.displayName, desc: "" }));
             const activeCols = mappingTab === "sales" ? salesCols : invCols;
             const hasActiveFile = mappingTab === "sales" ? hasSales : hasInventory;
             const salesReqFields = salesCatalogFields.filter((f) => f.isRequired);
@@ -1198,7 +892,7 @@ export function PredictionFlow() {
                                       <SelectTrigger aria-label={v.label} className="pc-column-select"><SelectValue /></SelectTrigger>
                                       <SelectContent className="pc-select-menu" position="popper" align="start">
                                         <SelectItem value="unassigned">Seleccionar columna…</SelectItem>
-                                        {activeCols.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                                        {activeCols.map(col => <SelectItem key={col} value={col} disabled={Object.entries(activeMapping).some(([key, selected]) => key !== v.key && selected === col)}>{col}</SelectItem>)}
                                       </SelectContent>
                                     </Select>
                                   </div>
@@ -1208,36 +902,7 @@ export function PredictionFlow() {
                           </div>
                         </div>
 
-                        <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="h-2 w-2 rounded-full bg-blue-500" />
-                            <p className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Variables opcionales</p>
-                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-600" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>Mejoran la precisión</span>
-                          </div>
-                          <div className="space-y-2">
-                            {activeOptVars.map((v) => {
-                              const val = activeMapping[v.key] ?? "";
-                              const isMapped = !!val;
-                              return (
-                                <div key={v.key} className={`prediction-mapping-row flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-blue-500/20 bg-blue-500/[0.03]" : "border-gray-100 bg-gray-50/60"}`}>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-gray-600" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{v.label}</p>
-                                    <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
-                                  </div>
-                                  <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                                    <Select value={val || "unassigned"} onValueChange={(value) => setActiveMapping((mapping) => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }))}>
-                                      <SelectTrigger aria-label={v.label} className="pc-column-select"><SelectValue /></SelectTrigger>
-                                      <SelectContent className="pc-select-menu" position="popper" align="start">
-                                        <SelectItem value="unassigned">No asignar</SelectItem>
-                                        {activeCols.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+
                       </div>
                     )}
                   </div>
@@ -1297,7 +962,7 @@ export function PredictionFlow() {
                     <div className="flex items-start gap-3 mb-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-gray-900" style={{ fontWeight: 700, fontSize: "0.875rem" }}>Procesamiento del análisis</p>
+                          <p className="text-gray-900" style={{ fontWeight: 600, fontSize: "1.125rem" }}>Procesamiento del análisis</p>
                         </div>
                         <div role="progressbar" aria-label="Análisis en curso" className="analysis-indeterminate-track">
                           <span />
@@ -1359,326 +1024,16 @@ export function PredictionFlow() {
             </div>
           )}
 
-          {/* ── STEP 4: RESULTS ── */}
-          {currentStep === 4 && (
-            <div className="analysis-surface prediction-analysis-surface">
-              <AnalysisMetrics items={[
-                {label:"Demanda prevista",icon:TrendingUp,value:prediction ? `${totalUnits.toLocaleString("es-PE", { maximumFractionDigits: 2 })} uds` : "—"},
-                {label:"Productos analizados",icon:Package,value:products.length > 0 ? products.length.toString() : "—"},
-                {label:"Precisión",icon:BarChart3,value:accuracy != null ? `${accuracy}%` : "—"},
-                {label:"Horizonte",icon:Calendar,value:`${forecastDays} días`},
-              ]}/>
-
-              {/* Interactive Chart + Sidebar */}
-              <div className="analysis-chart relative">
-                <AnimatePresence>
-                  {sidebarOpen && (
-                    <>
-                      <motion.div
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-                        className="absolute inset-0 analysis-chart-backdrop z-10"
-                        onClick={() => setSidebarOpen(false)}
-                      />
-                      <motion.div
-                        initial={{ x: -304 }} animate={{ x: 0 }} exit={{ x: -304 }}
-                        transition={{ type: "spring", stiffness: 320, damping: 32 }}
-                        className="analysis-medication-drawer absolute top-0 left-0 bottom-0 w-72 bg-white border-r border-gray-200 z-20 flex flex-col shadow-2xl"
-                        style={{ borderRadius: 0 }}
-                      >
-                        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
-                          <div>
-                            <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>Medicamentos</p>
-
-                          </div>
-                          <button aria-label="Cerrar lista de medicamentos" onClick={() => setSidebarOpen(false)}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <div className="px-4 py-3 border-b border-gray-100">
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                            <input type="text" placeholder="Buscar medicamento..." value={sidebarSearch}
-                              onChange={(e) => setSidebarSearch(e.target.value)}
-                              className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 focus:bg-white transition-all"
-                              style={{ fontSize: "0.8125rem" }} autoFocus />
-                          </div>
-                        </div>
-                        <div className="medication-list-scroll flex-1 overflow-y-auto py-2">
-                          {sidebarProducts.length === 0 ? (
-                            <div className="flex flex-col items-center gap-2 py-10 px-4 text-center">
-                              <Search className="h-6 w-6 text-gray-300" />
-                              <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>Sin resultados</p>
-                            </div>
-                          ) : (
-                            sidebarProducts.map((p) => {
-                              const isSelected = p.id === selectedProductId;
-
-                              return (
-                                <button key={p.id} onClick={() => { setSelectedProductId(p.id); setSidebarOpen(false); }}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-blue-500/5 border-r-2 border-r-blue-500" : ""}`}>
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`truncate ${isSelected ? "text-blue-600" : "text-gray-900"}`}
-                                      style={{ fontSize: "0.8125rem", fontWeight: isSelected ? 600 : 500 }}>{p.name}</p>
-
-                                  </div>
-                                  {isSelected && <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />}
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-
-                <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <button aria-label="Medicamentos" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((v) => !v)}
-                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-blue-500/50 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:text-gray-900"}`}
-                        style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
-                        {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-                        <span className="hidden sm:inline">Medicamentos</span>
-                      </button>
-                      <div>
-                        <p className="analysis-medication-title text-gray-900" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
-                          {selectedProduct?.name ?? "Selecciona un medicamento"}
-                        </p>
-                        
-                      </div>
-                    </div>
-                    <button onClick={() => setShowConfidence((v) => !v)}
-                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-blue-500/40 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-500 hover:border-gray-400"}`}
-                      style={{ fontSize: "0.75rem", fontWeight: 500 }}>
-                      {showConfidence ? "Ocultar" : "Mostrar"} intervalo de confianza
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-5 mt-3">
-                    <div className="flex items-center gap-2">
-                      <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" /></svg>
-                      <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Histórico</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
-                      <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Predicción</span>
-                    </div>
-                    {showConfidence && (
-                      <div className="flex items-center gap-2">
-                        <div className="h-3 w-6 rounded bg-blue-400/20 border border-blue-400/30" />
-                        <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo ±11%</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 ml-auto">
-                      <svg width="2" height="12" viewBox="0 0 2 12"><line x1="1" y1="0" x2="1" y2="12" stroke="#6e6e78" strokeWidth="1.5" strokeDasharray="3 2" /></svg>
-                      <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Inicio predicción · Totales semanales</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-2 py-4">
-                  <AnimatePresence mode="wait">
-                    <div key={`${selectedProductId}-${productChartData.length}`}>
-                      <ResponsiveContainer width="100%" height={320}>
-                        <ComposedChart data={productChartData.map((point, plotIndex) => ({ ...point, plotIndex }))} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
-                          <defs>
-                            <linearGradient id="confGradientPF" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#007AFF" stopOpacity={0.15} />
-                              <stop offset="100%" stopColor="#007AFF" stopOpacity={0.02} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="plotIndex" tickFormatter={(index) => productChartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={32} interval="preserveStartEnd" dy={8} />
-                          <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
-                          <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                          <ReferenceLine x={productChartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />
-                          {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGradientPF)" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
-                          {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
-                          <Line type="monotone" dataKey="historical" isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
-                          <Line type="monotone" dataKey="predicted" isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </AnimatePresence>
-                </div>
-              </div>
-
-              {/* Medication analysis table */}
-              {products.length > 0 && (
-                <div className="analysis-table-section">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-                    <div>
-                      <h3 className="text-gray-900 mb-0.5" style={{ fontWeight: 600 }}>Medicamentos analizados</h3>
-                      <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>{tableData.length} productos en este análisis</p>
-                    </div>
-                    <div className="relative min-w-56">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                      <input type="text" placeholder="Buscar producto..." value={resultsSearch}
-                        onChange={(e) => { setResultsSearch(e.target.value); setResultsTablePage(1); }}
-                        className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
-                        style={{ fontSize: "0.8125rem" }} />
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-100">
-                          {["Producto", "Categoría", "Dem. Histórica Prom.", "Demanda Predicha", "Variación (%)", "Tendencia"].map((h) => (
-                            <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedTableData.map((row) => {
-                          const varNum = row.variation ?? 0;
-                          const TrendIcon = varNum > 5 ? TrendingUp : varNum < -5 ? TrendingDown : Minus;
-                          const trendColor = varNum > 5 ? "text-blue-500" : varNum < -5 ? "text-red-500" : "text-gray-400";
-                          const trendBg = varNum > 5 ? "bg-blue-500/10" : varNum < -5 ? "bg-red-500/10" : "bg-gray-100";
-                          return (
-                            <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                              <td className="py-3 pr-3 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.name}</td>
-                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.category}</td>
-                              <td className="py-3 pr-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{row.avgHistorical == null ? "—" : row.avgHistorical.toLocaleString("es-PE", { maximumFractionDigits: 2 }) + " uds"}</td>
-                              <td className="py-3 pr-3 text-blue-500" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{row.predictedDemand.toLocaleString("es-PE", { maximumFractionDigits: 2 })} uds</td>
-                              <td className="py-3 pr-3" style={{ fontSize: "0.8125rem" }}>
-                                <span className="analysis-variation" style={{ fontWeight: 500 }}>
-                                  {row.variation == null ? "—" : (varNum > 0 ? "+" : "") + varNum.toFixed(1) + "%"}
-                                </span>
-                              </td>
-                              <td className="py-3">
-                                <span className="analysis-trend"
-                                  style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
-                                  <TrendIcon className="h-3 w-3" />
-                                  {row.variation == null ? "—" : varNum > 5 ? "Al alza" : varNum < -5 ? "A la baja" : "Estable"}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <Paginator page={resultsTablePage} total={searchedTableData.length} pageSize={PAGE_SIZE_TABLE} onChange={setResultsTablePage} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── STEP 5: PURCHASE PLAN ── */}
-          {currentStep === 5 && (
-            <div className="analysis-surface prediction-analysis-surface">
-              <div className="analysis-plan-heading flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Plan de compras recomendado</h2>
-                  <p className="text-gray-400" style={{ fontSize: "0.875rem" }}>Basado en la predicción para los próximos {forecastDays} días</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => exportPurchase("csv", products.map(p => ({name:p.name,quantity:p.recommendedQty,priority:p.priority})), forecastDays, prediction?.id?.slice(0,8) ?? "nuevo")} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
-                    style={{ fontSize: "0.8125rem" }}>
-                    <Download className="h-4 w-4" />Exportar CSV
-                  </button>
-                  <button onClick={() => exportPurchase("pdf", products.map(p => ({name:p.name,quantity:p.recommendedQty,priority:p.priority})), forecastDays, prediction?.id?.slice(0,8) ?? "nuevo")} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
-                    style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                    <Download className="h-4 w-4" />Exportar PDF
-                  </button>
-                </div>
-              </div>
-
-              <AnalysisMetrics items={[
-                {label:"Productos a comprar",icon:Package,value:products.length.toString()},
-                {label:"Ítems críticos",icon:AlertCircle,value:products.filter(p=>p.priority === "critical").length.toString()},
-                {label:"Prioridad alta",icon:TrendingUp,value:products.filter(p=>p.priority === "high").length.toString()},
-                {label:"Unidades totales",icon:ShoppingCart,value:totalUnits.toLocaleString()},
-              ]}/>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <PriorityFilter value={filterPriority} onChange={(priority) => { setFilterPriority(priority); setPlanTablePage(1); }}/>
-                <div className="relative ml-auto">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                  <input type="text" placeholder="Buscar producto..." value={planSearch}
-                    onChange={(e) => { setPlanSearch(e.target.value); setPlanTablePage(1); }}
-                    className="w-56 rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
-                    style={{ fontSize: "0.8125rem" }} />
-                </div>
-              </div>
-
-              <div className="analysis-table-section">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    {(() => {
-                      const showStock = products.some((p) => p.hasInventory);
-                      const headers = [
-                        "Producto",
-                        "Categoría",
-                        "Demanda predicha",
-                        ...(showStock ? ["Stock actual", "A comprar"] : ["Cant. recomendada"]),
-                        "Prioridad",
-                      ];
-                      return (
-                    <>
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        {headers.map((h) => (
-                          <th key={h} className="px-4 py-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedPlanProducts.map((product) => {
-                        const pConf = priorityConfig[product.priority];
-                        const isCritical = product.priority === "critical";
-                        return (
-                          <tr key={product.id}
-                            className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${isCritical ? "bg-red-500/[0.02]" : ""}`}>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                {isCritical && <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />}
-                                <span className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{product.name}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>{product.category}</td>
-                            <td className="px-4 py-3 text-blue-500" style={{ fontSize: "0.8125rem" }}>{product.predictedDemand} uds</td>
-                            {showStock ? (
-                              <>
-                                <td className="px-4 py-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>
-                                  {product.hasInventory ? `${product.currentStock} uds` : <span className="text-gray-300">—</span>}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{product.recommendedQty} uds</span>
-                                </td>
-                              </>
-                            ) : (
-                            <td className="px-4 py-3">
-                              <span className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{product.recommendedQty} uds</span>
-                            </td>
-                            )}
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${pConf.bg} ${pConf.border} ${pConf.color}`}
-                                style={{ fontSize: "0.6875rem", fontWeight: 500 }}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${pConf.dot}`} />
-                                {pConf.label}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {paginatedPlanProducts.length === 0 && (
-                        <tr>
-                          <td colSpan={headers.length} className="py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>
-                            No se encontraron productos
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                    </>
-                      );
-                    })()}
-                  </table>
-                </div>
-                <Paginator page={planTablePage} total={searchedPlanProducts.length} pageSize={PAGE_SIZE_PLAN} onChange={setPlanTablePage} />
-              </div>
-
+          {prediction && (currentStep === 4 || currentStep === 5) && (
+            <div className="analysis-surface">
+              <PredictionAnalysis key={prediction.id} executionId={prediction.id}
+                view={currentStep === 4 ? "demand" : "purchase"}
+                initialPrediction={prediction} initialPlan={purchasePlan} onPlanReady={setPurchasePlan}
+                preparePlan={() => {
+                  const inventory = files.find(file => file.type === "inventory")?.datasetId;
+                  return purchasePlanService.generate(prediction.id, undefined, inventory,
+                    inventory && Object.keys(inventoryMapping).length ? inventoryMapping : undefined);
+                }}/>
             </div>
           )}
         </motion.div>
@@ -1701,7 +1056,7 @@ export function PredictionFlow() {
         ) : currentStep < STEPS.length ? (
           <button
             onClick={handleNext}
-            disabled={!canProceed()}
+            disabled={uploadingFiles || !canProceed()}
             className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}
           >
@@ -1710,28 +1065,7 @@ export function PredictionFlow() {
           </button>
         ) : (
           <button
-            disabled={savingPlan}
-            onClick={async () => {
-              if (prediction) {
-                setSavingPlan(true);
-                try {
-                  const invFile = files.find((f) => f.type === "inventory");
-                  const invDatasetId = invFile?.datasetId;
-                  const invMappings = invDatasetId && Object.keys(inventoryMapping).length > 0
-                    ? inventoryMapping
-                    : undefined;
-                  const plan = await purchasePlanService.generate(
-                    prediction.id,
-                    undefined,
-                    invDatasetId,
-                    invMappings,
-                  );
-                  setPurchasePlan(plan);
-                } catch {
-                  // plan may already exist (conflict) or prediction has no results — navigate anyway
-                }
-                setSavingPlan(false);
-              }
+            onClick={() => {
               finishing.current = true;
               clearPredictionDraft();
               navigate("/historial");
@@ -1739,8 +1073,8 @@ export function PredictionFlow() {
             className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}
           >
-            {savingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {savingPlan ? "Guardando..." : "Guardar y finalizar"}
+            <CheckCircle className="h-4 w-4" />
+            Finalizar y ver historial
           </button>
         )}
       </div>

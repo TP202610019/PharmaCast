@@ -19,7 +19,7 @@ export interface ChartPoint {
   lower: number | null;
 }
 
-// ─── UI product type (mirrors mockData.PurchasePlanItem for chart/table compat) ─
+// ─── Analysis products derived from saved forecasts and purchase plan items ───
 
 export interface UIProduct {
   id: string;
@@ -66,6 +66,13 @@ export function forecastResultsToProducts(
     }
   }
 
+  // Match the server's volume ranking over the complete execution, never a visible page.
+  const ranked = [...productMap.entries()].filter(([, value]) => value.total > 0)
+    .sort(([a, av], [b, bv]) => bv.total - av.total || (a < b ? -1 : a > b ? 1 : 0));
+  const priorities = new Map<string, UIProduct["priority"]>(ranked.map(([name], index) => {
+    const fraction = index / ranked.length;
+    return [name, fraction < .15 ? "critical" : fraction < .40 ? "high" : fraction < .75 ? "medium" : "low"];
+  }));
   let idx = 0;
   const products: UIProduct[] = [];
 
@@ -73,7 +80,7 @@ export function forecastResultsToProducts(
     const avgPredicted = agg.total / Math.max(agg.count, 1);
     const planItem = planMap.get(name);
 
-    const priority = derivePriority(avgPredicted);
+    const priority = priorities.get(name) ?? "low";
 
     products.push({
       id: `product-${idx++}`,
@@ -81,7 +88,7 @@ export function forecastResultsToProducts(
       category: planItem?.category ?? "General",
       currentStock: planItem?.stockActual ?? 0,
       predictedDemand: avgPredicted,
-      recommendedQty: planItem?.toPurchase ?? planItem?.recommendedQuantity ?? agg.total,
+      recommendedQty: planItem?.recommendedQuantity ?? Math.ceil(agg.total),
       hasInventory: planItem?.stockActual != null,
       priority,
       unitCost: planItem?.estimatedCost
@@ -93,13 +100,6 @@ export function forecastResultsToProducts(
   }
 
   return products;
-}
-
-function derivePriority(avgDailyQty: number): "critical" | "high" | "medium" | "low" {
-  if (avgDailyQty > 1.67) return "critical";
-  if (avgDailyQty > 0.42) return "high";
-  if (avgDailyQty > 0.08) return "medium";
-  return "low";
 }
 
 // ─── Build chart data for a product from forecast results ─────────────────────
@@ -121,27 +121,10 @@ export function buildProductChartData(
       date: formatChartDate(r.forecastDate),
       historical: null,
       predicted: r.predictedQuantity,
-      upper: r.upperBound ?? r.predictedQuantity + conf,
-      lower: r.lowerBound ?? Math.max(0, r.predictedQuantity - conf),
+      upper: r.upperBound ?? null,
+      lower: r.lowerBound ?? null,
     };
   });
-}
-
-// ─── Fallback chart data when no forecast results exist ───────────────────────
-
-export function buildGeneratedChartData(baseVal: number, days: number): ChartPoint[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const data: ChartPoint[] = [];
-
-  for (let i = 0; i < days; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const label = d.toLocaleDateString("es-ES", { month: "short", day: "numeric" });
-    const conf = Math.round(baseVal * 0.11);
-    data.push({ date: label, historical: null, predicted: baseVal, upper: baseVal + conf, lower: Math.max(0, baseVal - conf) });
-  }
-  return data;
 }
 
 export function formatChartDate(value: string): string {
@@ -169,8 +152,8 @@ export function buildChartFromBackendPoints(
   for (const p of backendPoints) {
     const point = pointFor(p.date);
     point.predicted = p.predicted;
-    point.upper = p.upper ?? p.predicted * 1.11;
-    point.lower = p.lower ?? Math.max(0, p.predicted * 0.89);
+    point.upper = p.upper ?? null;
+    point.lower = p.lower ?? null;
   }
   const weeks = new Map<string, ChartPoint>();
   for (const [day, point] of [...days.entries()].sort(([a], [b]) => a.localeCompare(b))) {

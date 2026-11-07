@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     for (const key of Object.keys(sessionStorage)) {
       if (key.startsWith("prediction-draft:")) sessionStorage.removeItem(key);
     }
+    invalidateDashboardCache();
     setTokens(auth.accessToken, auth.refreshToken, auth.expiresAt);
 
     const pharmacy = localStorage.getItem(STORAGE.PHARMACY) ?? "Mi Farmacia";
@@ -85,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pharmacy = "Mi Farmacia"
   ) => {
     const auth = await authService.register(fullName, email, password);
+    invalidateDashboardCache();
     setTokens(auth.accessToken, auth.refreshToken, auth.expiresAt);
     localStorage.setItem(STORAGE.PHARMACY, pharmacy);
 

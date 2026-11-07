@@ -1,3 +1,5 @@
+import { peekCache } from "../../lib/dashboardCache";
+import type { PredictionSummaryResponse } from "../../types/api";
 import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
@@ -49,15 +51,15 @@ const statusConfig = {
 
 export function History() {
   const navigate = useNavigate();
-  const [records, setRecords] = useState<PredictionUIRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<PredictionUIRecord[]>(() => (peekCache<PredictionSummaryResponse[]>("history") ?? []).map(summaryToUIRecord));
+  const [loading, setLoading] = useState(() => peekCache("history") === undefined);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
   const loadHistory = useCallback(async () => {
-    setLoading(true);
+    setLoading(peekCache("history") === undefined);
     setError("");
     try {
       const summaries = await predictionService.getHistory();
@@ -107,10 +109,11 @@ export function History() {
 
   if (loading) return <WorkspaceLoading label="Cargando historial…" />;
 
-  if (error) return <WorkspaceError title="Error al cargar el historial" message={error} onRetry={loadHistory} />;
+  if (error && peekCache("history") === undefined) return <WorkspaceError title="Error al cargar el historial" message={error} onRetry={loadHistory} />;
 
   return (
     <div className="history-page workspace-page">
+      {error && <p role="status" className="text-sm text-red-500">No se pudo actualizar el historial. Se muestran los datos anteriores.</p>}
       <header className="module-heading"><div><h1>Historial de predicciones</h1><p>Revisa tus análisis anteriores y vuelve a cada resultado.</p></div><button className="module-primary" onClick={() => navigate("/predicciones/nueva")}><BarChart3 size={16}/>Nueva predicción</button></header>
 
       {/* Summary stats */}

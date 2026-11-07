@@ -1,96 +1,21 @@
+import { PredictionAnalysis } from "../components/PredictionAnalysis";
+import { peekCache } from "../../lib/dashboardCache";
 import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
-import { PriorityFilter, AnalysisMetrics, AnalysisTabs } from "../components/AnalysisLayout";
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useNavigate, Link } from "react-router";
-import {
-  TrendingUp, Package, BarChart3, Calendar, PlusCircle, History,
-  Search, PanelLeftOpen, PanelLeftClose, ChevronLeft, ChevronRight,
-  CheckCircle, Download, AlertTriangle, Clock, Zap, Building2,
-  Lightbulb, TrendingDown, Minus, Loader2, Activity,
-} from "lucide-react";
-import {
-  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend,
-} from "recharts";
-import { motion, AnimatePresence } from "motion/react";
+import { AnalysisTabs } from "../components/AnalysisLayout";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router";
+import { TrendingUp, Package, BarChart3, Calendar, PlusCircle, History, Download, AlertTriangle, Clock, Zap, Building2, Lightbulb } from "lucide-react";
+import { motion } from "motion/react";
 import { useAuth } from "../context/AuthContext";
 import { dashboardService } from "../../services/dashboard.service";
-import {
-  buildChartFromBackendPoints,
-  relativeTime,
-  type ChartPoint,
-} from "../../lib/transforms";
-import type {
-  DashboardMetricsResponse,
-  DashboardSummaryResponse,
-  DashboardProductRow,
-  PagedResult,
-} from "../../types/api";
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const priorityConfig = {
-  critical: { label: "Crítico",  color: "text-red-500",    bg: "bg-red-500/10",    border: "border-red-500/30",    dot: "bg-red-500"    },
-  high:     { label: "Alto",     color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30", dot: "bg-orange-500" },
-  medium:   { label: "Medio",    color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/30", dot: "bg-yellow-500" },
-  low:      { label: "Bajo",     color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30",   dot: "bg-blue-500"   },
-};
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  const filtered = payload.filter((p: any) => p.value != null && p.name !== "upper" && p.name !== "lower");
-  if (!filtered.length) return null;
-  return (
-    <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xl" style={{ minWidth: 170 }}>
-      <p className="text-gray-400 mb-2" style={{ fontSize: "0.6875rem", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>{payload?.[0]?.payload?.weekRange ?? payload?.[0]?.payload?.date ?? label}</p>
-      {filtered.map((p: any) => (
-        <div key={p.name} className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.name === "historical" ? "#007AFF" : "#007AFF" }} />
-            <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>{p.name === "historical" ? "Histórico" : "Predicción"}</span>
-          </div>
-          <span style={{ color: p.name === "historical" ? "#007AFF" : "#007AFF", fontSize: "0.875rem", fontWeight: 700 }}>{p.value} uds</span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const PAGE = 10;
-
-function Paginator({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
-      <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>
-        {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} de {total}
-      </p>
-      <div className="flex items-center gap-1">
-        <button onClick={() => onChange(page - 1)} disabled={page === 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </button>
-        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
-          <button key={p} onClick={() => onChange(p)}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${p === page ? "border-blue-500 bg-blue-500 text-white" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
-            style={{ fontSize: "0.75rem", fontWeight: p === page ? 600 : 400 }}>
-            {p}
-          </button>
-        ))}
-        <button onClick={() => onChange(page + 1)} disabled={page === totalPages}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
+import { relativeTime } from "../../lib/transforms";
+import type { DashboardMetricsResponse, DashboardSummaryResponse } from "../../types/api";
 
 const tips = [
-  { icon: AlertTriangle, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20", title: "Revisa los críticos primero", desc: "Los productos con prioridad crítica tienen riesgo de desabasto en menos de 7 días." },
-  { icon: Zap, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20", title: "Optimiza el ciclo de compras", desc: "Consolidar pedidos para el mismo proveedor reduce costos de envío hasta un 20%." },
+  { icon: AlertTriangle, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20", title: "Revisa los críticos primero", desc: "Revisa primero los productos con mayor demanda prevista y contrasta las cantidades con tu stock." },
+  { icon: Zap, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20", title: "Optimiza el ciclo de compras", desc: "Agrupa los productos por proveedor antes de preparar tu pedido." },
   { icon: Lightbulb, color: "text-yellow-500", bg: "bg-yellow-500/10 border-yellow-500/20", title: "Actualiza tu inventario", desc: "Subir datos de inventario actualizados mejora la precisión de la predicción." },
 ];
 
@@ -100,34 +25,12 @@ export function Dashboard() {
   const navigate = useNavigate();
 
   // ── Core data ──
-  const [metrics, setMetrics] = useState<DashboardMetricsResponse | null>(null);
-  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<DashboardMetricsResponse | null>(() => peekCache<DashboardMetricsResponse>("metrics") ?? null);
+  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(() => peekCache<DashboardSummaryResponse>("summary") ?? null);
+  const [loading, setLoading] = useState(() => !peekCache("metrics") || !peekCache("summary"));
   const [error, setError] = useState<string | null>(null);
 
-  // ── Products table (backend-paginated) ──
-  const [productsData, setProductsData] = useState<PagedResult<DashboardProductRow> | null>(null);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [resultsPage, setResultsPage] = useState(1);
-  const [resultsSearch, setResultsSearch] = useState("");
-
-  // ── Plan tab (reuses productsData, client-side filter) ──
-  const [planPage, setPlanPage] = useState(1);
-  const [planSearch, setPlanSearch] = useState("");
-  const [filterPriority, setFilterPriority] = useState("all");
-
-  // ── Chart (on-demand) ──
-  const [selectedProduct, setSelectedProduct] = useState<string>("");
-  const [chartData, setChartData] = useState<ChartPoint[]>([]);
-  const [chartLoading, setChartLoading] = useState(false);
-  // Component-level chart cache: avoids re-generating synthetic history on repeated selections
-  const chartCache = useRef<Map<string, ChartPoint[]>>(new Map());
-
-  // ── UI ──
   const [activeTab, setActiveTab] = useState<"dashboard" | "purchase">("dashboard");
-  const [showConfidence, setShowConfidence] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarSearch, setSidebarSearch] = useState("");
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -138,7 +41,7 @@ export function Dashboard() {
 
   // ── Initial load: metrics + summary in parallel ──
   const loadData = useCallback(async () => {
-    setLoading(true);
+    setLoading(!peekCache("metrics") || !peekCache("summary"));
     setError(null);
     try {
       const [metricsData, summaryData] = await Promise.all([
@@ -158,92 +61,20 @@ export function Dashboard() {
   useEffect(() => { loadData(); }, [loadData]);
 
 
-  // ── Select first product once summary loads ──
-  useEffect(() => {
-    if (summary?.productNames?.length && !selectedProduct) {
-      setSelectedProduct(summary.productNames[0]);
-    }
-  }, [summary, selectedProduct]);
-
-  // ── Load products page when predictionId / page / search changes ──
-  useEffect(() => {
-    const predictionId = summary?.latestPredictionId;
-    if (!predictionId) return;
-
-    setProductsLoading(true);
-    dashboardService
-      .getProducts(predictionId, resultsPage, PAGE, resultsSearch || undefined)
-      .then((data) => setProductsData(data))
-      .catch((err) => console.warn("[Dashboard] getProducts failed:", err))
-      .finally(() => setProductsLoading(false));
-  }, [summary?.latestPredictionId, resultsPage, resultsSearch]);
-
-  // ── Load chart on product selection ──
-  useEffect(() => {
-    const predictionId = summary?.latestPredictionId;
-    if (!predictionId || !selectedProduct) return;
-
-    // Use component-level cache to avoid regenerating synthetic history
-    const cached = chartCache.current.get(selectedProduct);
-    if (cached) {
-      setChartData(cached);
-      return;
-    }
-
-    setChartLoading(true);
-    dashboardService
-      .getChart(predictionId, selectedProduct)
-      .then((response) => {
-        const full = buildChartFromBackendPoints(response.points, summary?.forecastPeriod ?? 30);
-        chartCache.current.set(selectedProduct, full);
-        setChartData(full);
-      })
-      .catch((err) => console.warn("[Dashboard] getChart failed:", err))
-      .finally(() => setChartLoading(false));
-  }, [selectedProduct, summary?.latestPredictionId, summary?.forecastPeriod]);
-
-  // ── Sidebar product list filtered by search ──
-  const sidebarProducts = useMemo(() => {
-    const names = summary?.productNames ?? [];
-    if (!sidebarSearch) return names;
-    return names.filter((n) => n.toLowerCase().includes(sidebarSearch.toLowerCase()));
-  }, [summary?.productNames, sidebarSearch]);
-
-  // ── Plan tab: client-side filter over current products page ──
-  const planItems = useMemo(() => {
-    const items = productsData?.items ?? [];
-    const byPriority = filterPriority === "all" ? items : items.filter((p) => p.priority === filterPriority);
-    if (!planSearch) return byPriority;
-    return byPriority.filter((p) => p.productName.toLowerCase().includes(planSearch.toLowerCase()));
-  }, [productsData, filterPriority, planSearch]);
-
-  const paginatedPlan = planItems.slice((planPage - 1) * PAGE, planPage * PAGE);
-
-  const bridgeLabel = useMemo(
-    () => new Date().toLocaleDateString("es-ES", { month: "short", day: "numeric" }),
-    []
-  );
-
-  // ── Table helpers ──
-  const getAvgHistorical = (p: DashboardProductRow) => p.historicalAvg;
-  const getVariation = (p: DashboardProductRow) => {
-    const a = getAvgHistorical(p);
-    return a != null && a > 0 ? ((p.avgPredictedQuantity - a) / a) * 100 : null;
-  };
-
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 
   // ── Loading / Error states ──
   if (loading) return <WorkspaceLoading label="Cargando panel…" />;
 
-  if (error) return <WorkspaceError title="Error al cargar el panel" message={error} onRetry={loadData} />;
+  if (error && !metrics) return <WorkspaceError title="Error al cargar el panel" message={error} onRetry={loadData} />;
 
   const hasPrediction = !!summary?.latestPredictionId;
 
   return (
     <div className="dashboard-page workspace-page">
       <div className="dashboard-content">
+      {error && <p role="status" className="text-sm text-red-500">No se pudo actualizar el panel. Se muestran los datos anteriores.</p>}
 
         <header className="module-heading">
           <div><h1>Mi panel</h1><p>{greeting()}, {user?.name ?? "Usuario"}. Este es el resumen de tu farmacia.</p><span className="module-pharmacy"><Building2 size={13}/>{user?.pharmacy ?? "Mi Farmacia"}</span></div>
@@ -290,7 +121,6 @@ export function Dashboard() {
                 <div>
                   <p className="text-gray-400 mb-0.5" style={{ fontSize: "0.75rem" }}>{card.label}</p>
                   <p className="text-gray-900" style={{ fontSize: "1.25rem", fontWeight: 700, lineHeight: 1.1 }}>{card.value}</p>
-                  {card.hint && <small className="module-metric-hint">{card.hint}</small>}
                 </div>
               </div>
             );
@@ -365,307 +195,10 @@ export function Dashboard() {
               </div>
             </div>
 
-            <AnalysisTabs tabs={[{id:"dashboard",label:"Demanda",icon:BarChart3},{id:"purchase",label:"Plan de compras",icon:Package}]} active={activeTab} onChange={setActiveTab} />
+            <AnalysisTabs<"dashboard" | "purchase"> tabs={[{id:"dashboard",label:"Demanda",icon:BarChart3},{id:"purchase",label:"Plan de compras",icon:Package}]} active={activeTab} onChange={setActiveTab} />
 
-            {/* ── DASHBOARD TAB ── */}
-            {activeTab === "dashboard" && (
-              <div className="analysis-content px-6 pb-6">
-                <AnalysisMetrics items={[
-                  {label:"Demanda prevista",icon:TrendingUp,value:`${Math.round(summary.totalForecastedUnits).toLocaleString()} uds`,emphasis:true},
-                  {label:"Productos analizados",icon:Package,value:summary.totalProducts.toString()},
-                  {label:"Precisión",icon:BarChart3,value:summary.accuracy > 0 ? `${summary.accuracy}%` : "—"},
-                  {label:"Horizonte",icon:Calendar,value:`${summary.forecastPeriod ?? "—"} días`},
-                ]}/>
-
-                {/* Interactive Chart */}
-                <div className="analysis-chart relative">
-                  <AnimatePresence>
-                    {sidebarOpen && (
-                      <>
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                          transition={{ duration: 0.2 }} className="absolute inset-0 analysis-chart-backdrop z-10"
-                          onClick={() => setSidebarOpen(false)} />
-                        <motion.div initial={{ x: -304 }} animate={{ x: 0 }} exit={{ x: -304 }}
-                          transition={{ type: "spring", stiffness: 320, damping: 32 }}
-                          className="analysis-medication-drawer absolute top-0 left-0 bottom-0 w-72 bg-white border-r border-gray-200 z-20 flex flex-col shadow-2xl"
-                          style={{ borderRadius: 0 }}>
-                          <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
-                            <div>
-                              <p className="text-gray-900" style={{ fontSize: "0.875rem", fontWeight: 600 }}>Medicamentos</p>
-                              <p className="text-gray-400" style={{ fontSize: "0.75rem" }}>{sidebarProducts.length} de {summary.productNames.length}</p>
-                            </div>
-                            <button aria-label="Cerrar lista de medicamentos" onClick={() => setSidebarOpen(false)}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
-                              <PanelLeftClose className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="px-4 py-3 border-b border-gray-100">
-                            <div className="relative">
-                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                              <input type="text" placeholder="Buscar medicamento..." value={sidebarSearch}
-                                onChange={(e) => setSidebarSearch(e.target.value)}
-                                className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 focus:bg-white transition-all"
-                                style={{ fontSize: "0.8125rem" }} />
-                            </div>
-                          </div>
-                          <div className="flex-1 overflow-y-auto py-2">
-                            {sidebarProducts.length === 0 ? (
-                              <div className="flex flex-col items-center gap-2 py-10 text-center">
-                                <Search className="h-6 w-6 text-gray-300" />
-                                <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>Sin resultados</p>
-                              </div>
-                            ) : sidebarProducts.map((name) => {
-                              const isSelected = name === selectedProduct;
-                              const pConf = priorityConfig["low"];
-                              return (
-                                <button key={name} onClick={() => { setSelectedProduct(name); setSidebarOpen(false); }}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-gray-50 ${isSelected ? "bg-blue-500/5 border-r-2 border-r-blue-500" : ""}`}>
-                                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${pConf.bg}`}>
-                                    <span className={`h-2 w-2 rounded-full ${pConf.dot}`} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`truncate ${isSelected ? "text-blue-600" : "text-gray-900"}`}
-                                      style={{ fontSize: "0.8125rem", fontWeight: isSelected ? 600 : 500 }}>{name}</p>
-                                  </div>
-                                  {isSelected && <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
-
-                  <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <button aria-label="Medicamentos" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((v) => !v)}
-                          className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${sidebarOpen ? "border-blue-500/50 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-600 hover:border-gray-400"}`}
-                          style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
-                          {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-                          <span className="hidden sm:inline">Medicamentos</span>
-                        </button>
-                        <div>
-                          <p className="analysis-medication-title text-gray-900" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
-                            {selectedProduct || "Selecciona un medicamento"}
-                          </p>
-                          
-                        </div>
-                      </div>
-                      <button onClick={() => setShowConfidence((v) => !v)}
-                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${showConfidence ? "border-blue-500/40 bg-blue-500/10 text-blue-600" : "border-gray-300 bg-white text-gray-500"}`}
-                        style={{ fontSize: "0.75rem", fontWeight: 500 }}>
-                        {showConfidence ? "Ocultar" : "Mostrar"} intervalo de confianza
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-5 mt-3">
-                      <div className="flex items-center gap-2">
-                        <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" /></svg>
-                        <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Histórico</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="24" y2="5" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 3" /></svg>
-                        <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Predicción</span>
-                      </div>
-                      {showConfidence && (
-                        <div className="flex items-center gap-2">
-                          <div className="h-3 w-6 rounded bg-blue-400/20 border border-blue-400/30" />
-                          <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>Intervalo ±11%</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="px-2 py-4">
-                    {chartLoading ? (
-                      <div className="flex items-center justify-center h-[300px]">
-                        <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
-                      </div>
-                    ) : (
-                      <AnimatePresence mode="wait">
-                        <div key={`${selectedProduct}-${chartData.length}`}>
-                          <ResponsiveContainer width="100%" height={300}>
-                            <ComposedChart data={chartData.map((point, plotIndex) => ({ ...point, plotIndex }))} margin={{ top: 10, right: 24, left: 0, bottom: 8 }}>
-                              <defs>
-                                <linearGradient id="confGrad2" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#007AFF" stopOpacity={0.15} />
-                                  <stop offset="100%" stopColor="#007AFF" stopOpacity={0.02} />
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                              <XAxis dataKey="plotIndex" tickFormatter={(index) => chartData[Number(index)]?.date ?? ""} tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={32} interval="preserveStartEnd" dy={8} />
-                              <YAxis tick={{ fill: "#85858f", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
-                              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                              <ReferenceLine x={chartData.findIndex(point => point.predicted != null)} stroke="#6e6e78" strokeWidth={1.5} strokeDasharray="4 4" />
-                              {showConfidence && <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGrad2)" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
-                              {showConfidence && <Area type="monotone" dataKey="lower" stroke="none" fill="#ffffff" connectNulls={false} isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" />}
-                              <Line type="monotone" dataKey="historical" isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
-                              <Line type="monotone" dataKey="predicted" isAnimationActive={true} animationBegin={1200} animationDuration={450} animationEasing="linear" stroke="#007AFF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} activeDot={{ r: 5, fill: "#007AFF", strokeWidth: 0 }} connectNulls={false} />
-                            </ComposedChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </AnimatePresence>
-                    )}
-                  </div>
-                </div>
-
-                {/* Products table (backend-paginated) */}
-                <div className="analysis-table-section">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <div>
-                      <h3 className="text-gray-900 mb-0.5" style={{ fontWeight: 600 }}>Medicamentos analizados</h3>
-                      <p className="text-gray-400" style={{ fontSize: "0.8125rem" }}>
-                        {productsData ? `${productsData.totalCount} productos` : "Cargando..."}
-                      </p>
-                    </div>
-                    <div className="relative min-w-52">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                      <input type="text" placeholder="Buscar producto..." value={resultsSearch}
-                        onChange={(e) => { setResultsSearch(e.target.value); setResultsPage(1); }}
-                        className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
-                        style={{ fontSize: "0.8125rem" }} />
-                    </div>
-                  </div>
-
-                  {productsLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            {["Producto", "Dem. Histórica", "Dem. Predicha (día)", "Variación", "Tendencia"].map((h) => (
-                              <th key={h} className="pb-3 text-left text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(productsData?.items ?? []).map((p) => {
-                            const pConf = priorityConfig[p.priority];
-                            const hist = getAvgHistorical(p);
-                            const varVal = getVariation(p);
-                            const isUp = varVal != null && varVal > 2;
-                            const isDown = varVal != null && varVal < -2;
-                            return (
-                              <tr key={p.productName} className="border-b border-gray-100 hover:bg-white transition-colors">
-                                <td className="py-3 pr-4">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`h-2 w-2 rounded-full shrink-0 ${pConf.dot}`} />
-                                    <span className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</span>
-                                  </div>
-                                </td>
-                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{hist == null ? "—" : `${hist} uds`}</td>
-                                <td className="py-3 pr-4 text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{Math.round(p.avgPredictedQuantity)} uds</td>
-                                <td className="py-3 pr-4">
-                                  <span className="analysis-variation"
-                                    style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                                    {varVal == null ? "—" : `${isUp ? "+" : isDown ? "" : "~"}${varVal.toFixed(1)}%`}
-                                  </span>
-                                </td>
-                                <td className="py-3">
-                                  <span className="analysis-trend">{varVal == null ? "—" : <>{isUp ? <TrendingUp/> : isDown ? <TrendingDown/> : <Minus/>}{isUp ? "Al alza" : isDown ? "A la baja" : "Estable"}</>}</span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {!productsLoading && !productsData?.items.length && (
-                            <tr><td colSpan={5} className="py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>Sin datos de productos</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {productsData && (
-                    <Paginator
-                      page={resultsPage}
-                      total={productsData.totalCount}
-                      pageSize={PAGE}
-                      onChange={(p) => setResultsPage(p)}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ── PURCHASE PLAN TAB ── */}
-            {activeTab === "purchase" && (
-              <div className="analysis-content px-6 pb-6">
-                <AnalysisMetrics items={[
-                  {label:"Productos a comprar",icon:Package,value:summary.totalProducts.toString(),emphasis:true},
-                  {label:"Ítems críticos",icon:AlertTriangle,value:summary.criticalCount.toString()},
-                  {label:"Inversión estimada",icon:TrendingUp,value:"—"},
-                  {label:"Horizonte",icon:Calendar,value:`${summary.forecastPeriod ?? "—"} días`},
-                ]}/>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <PriorityFilter value={filterPriority} onChange={(priority) => { setFilterPriority(priority); setPlanPage(1); }}/>
-                  <div className="relative ml-auto min-w-52">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                    <input type="text" placeholder="Buscar producto..." value={planSearch}
-                      onChange={(e) => { setPlanSearch(e.target.value); setPlanPage(1); }}
-                      className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-3 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
-                      style={{ fontSize: "0.8125rem" }} />
-                  </div>
-                </div>
-
-                <div className="analysis-table-section">
-                  {productsLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            {["Medicamento", "Cant. Total Prevista", "Cant. Diaria", "Prioridad"].map((h) => (
-                              <th key={h} className="px-4 py-3 text-left text-gray-400 whitespace-nowrap" style={{ fontSize: "0.75rem", fontWeight: 500 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paginatedPlan.map((p) => {
-                            const pConf = priorityConfig[p.priority];
-                            return (
-                              <tr key={p.productName} className="border-b border-gray-100 hover:bg-white transition-colors">
-                                <td className="px-4 py-3">
-                                  <p className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>{p.productName}</p>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 700 }}>{Math.round(p.totalPredictedQuantity)} uds</span>
-                                </td>
-                                <td className="px-4 py-3 text-gray-500" style={{ fontSize: "0.8125rem" }}>
-                                  {Math.round(p.avgPredictedQuantity)} uds/día
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 ${pConf.bg} ${pConf.border}`}
-                                    style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                                    <span className={`h-1.5 w-1.5 rounded-full ${pConf.dot}`} />
-                                    <span className={pConf.color}>{pConf.label}</span>
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {paginatedPlan.length === 0 && (
-                            <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400" style={{ fontSize: "0.875rem" }}>Sin productos en el plan</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {planItems.length > PAGE && (
-                    <div className="px-4">
-                      <Paginator page={planPage} total={planItems.length} pageSize={PAGE} onChange={setPlanPage} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <PredictionAnalysis key={summary.latestPredictionId!} executionId={summary.latestPredictionId!}
+              view={activeTab === "dashboard" ? "demand" : "purchase"}/>
           </motion.div>
         )}
 
