@@ -159,11 +159,7 @@ export function PredictionFlow() {
   }, [prediction, purchasePlan]);
 
   const accuracy = useMemo(() => {
-    const overall = prediction?.metrics.find((m) =>
-      (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
-      (m.method == null || m.method === "XGBoost"));
-    return overall?.volumeAccuracy != null && Number.isFinite(overall.volumeAccuracy)
-      ? extractAccuracy(prediction!.metrics) : null;
+    return prediction ? extractAccuracy(prediction.metrics) : null;
   }, [prediction]);
   const recordCount = files.reduce((sum, file) => sum + (file.rows || 0), 0);
 
