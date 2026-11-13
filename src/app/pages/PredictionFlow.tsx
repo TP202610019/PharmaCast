@@ -159,11 +159,7 @@ export function PredictionFlow() {
   }, [prediction, purchasePlan]);
 
   const accuracy = useMemo(() => {
-    const overall = prediction?.metrics.find((m) =>
-      (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
-      (m.method == null || m.method === "XGBoost"));
-    return overall?.volumeAccuracy != null && Number.isFinite(overall.volumeAccuracy)
-      ? extractAccuracy(prediction!.metrics) : null;
+    return prediction ? extractAccuracy(prediction.metrics) : null;
   }, [prediction]);
   const recordCount = files.reduce((sum, file) => sum + (file.rows || 0), 0);
 
@@ -229,16 +225,6 @@ export function PredictionFlow() {
         setInventoryMapping({});
       }
       setFiles(prev => prev.filter(f => f.type !== type));
-      if (!/\.(csv|xls|xlsx)$/i.test(file.name)) {
-        setFiles(prev => [...prev, { name: file.name, size: file.size, type, uploadError: "Formato no permitido" }]);
-        setUploadError("Formato no permitido. Usa un archivo CSV, XLS o XLSX.");
-        return;
-      }
-      if (!file.size || file.size > 30 * 1024 * 1024) {
-        setFiles(prev => [...prev, { name: file.name, size: file.size, type, uploadError: "Tamaño no válido" }]);
-        setUploadError(!file.size ? "El archivo está vacío." : "El archivo supera el límite de 30 MB.");
-        return;
-      }
       setFiles(prev => [...prev, { name: file.name, size: file.size, type, validating: true, rawFile: file }]);
       try {
         const preview = await validateLocalDataset(file);

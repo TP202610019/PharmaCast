@@ -178,10 +178,9 @@ export function buildChartFromBackendPoints(
 
 export function extractAccuracy(metrics: PredictionMetricResponse[]): number | null {
   const overall = metrics.find((m) =>
-    (m.scope === "Overall" || (m.scope == null && m.productName == null)) &&
-    (m.method == null || m.method === "XGBoost"));
+    m.scope === "Overall" && m.method === "XGBoost");
   if (overall?.volumeAccuracy == null || !Number.isFinite(overall.volumeAccuracy)) return null;
-  return Math.max(0, Math.round(overall.volumeAccuracy * 10) / 10);
+  return Math.round(overall.volumeAccuracy * 10) / 10;
 }
 
 // ─── Format execution status for display ─────────────────────────────────────
