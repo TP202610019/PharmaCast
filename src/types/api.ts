@@ -121,6 +121,7 @@ export interface PagedResult<T> {
 }
 
 export interface DashboardChartPoint {
+  periodEnd?: string | null;
   date: string;
   predicted: number;
   upper: number | null;
@@ -202,6 +203,7 @@ export interface CreatePredictionRequest {
 }
 
 export interface ForecastResultResponse {
+  periodEnd?: string | null;
   productName: string;
   forecastDate: string;
   predictedQuantity: number;
@@ -229,6 +231,7 @@ export interface PredictionMetricResponse {
 }
 
 export interface PredictionResponse {
+  forecastFrequency?: "Daily" | "Weekly";
   productSummaries?: { productName: string; totalPredicted: number; averageDailyPredicted: number; historicalAvg: number | null; variationPercent: number | null }[];
   productMetrics?: PredictionMetricResponse[];
   baselineMetrics?: PredictionMetricResponse[];

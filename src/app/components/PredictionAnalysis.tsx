@@ -98,7 +98,7 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
 
   const products = useMemo(() => {
     if (!prediction) return [];
-    const rows = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics);
+    const rows = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics, prediction.forecastPeriod);
     const summaries = new Map(prediction.productSummaries?.map(row => [row.productName, row]));
     return rows.map(row => {
       const summary = summaries.get(row.name);
