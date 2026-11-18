@@ -1,6 +1,7 @@
 import { predictionService } from "../services/prediction.service";
 import { purchasePlanService } from "../services/purchase-plan.service";
 import { forecastResultsToProducts } from "./transforms";
+import { purchaseExportFilename } from "./exportFilename";
 export type PurchaseRow = {name:string; quantity:number; priority:string};
 const labels:Record<string,string>={critical:"Crítico",high:"Alto",medium:"Medio",low:"Bajo"};
 export const priorityRank:Record<string,number>={critical:0,high:1,medium:2,low:3};
@@ -9,7 +10,7 @@ export async function exportPurchase(format:"pdf"|"csv", rows:PurchaseRow[], day
  const body=sorted.map(r=>[r.name,String(Math.ceil(r.quantity)),labels[r.priority]??r.priority]);
  if(format==="csv"){
   const csv="\uFEFF"+[["Medicamento","Cantidad sugerida","Prioridad"],...body].map(row=>row.map(v=>'"'+v.replace(/"/g,'""')+'"').join(';')).join('\r\n');
-  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));const a=document.createElement('a');a.href=url;a.download=`plan-compras-${reference}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));const a=document.createElement('a');a.href=url;a.download=purchaseExportFilename(reference, "csv");a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
  }
  const [{jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')]);
  const doc=new jsPDF();
@@ -28,7 +29,7 @@ export async function exportPurchase(format:"pdf"|"csv", rows:PurchaseRow[], day
  text('Detalle de reposición',15,99,12,true);text('Ordenado de mayor a menor prioridad',15,106,9,false,[110,110,120]);
  autoTable(doc,{startY:114,head:[['MEDICAMENTO','CANTIDAD SUGERIDA','PRIORIDAD']],body,styles:{font:'helvetica',fontSize:10,cellPadding:4.5,textColor:ink,lineColor:[235,235,240],lineWidth:{bottom:0.2}},headStyles:{fillColor:[255,255,255],textColor:ink,fontStyle:'bold',fontSize:8,lineWidth:{bottom:0.5},lineColor:[210,210,220]},alternateRowStyles:{fillColor:[250,250,252]},columnStyles:{0:{cellWidth:93},1:{halign:'right',cellWidth:49},2:{cellWidth:38}},margin:{top:22,bottom:24,left:15,right:15},rowPageBreak:'avoid',didParseCell:data=>{if(data.section==='body'&&data.column.index===2){data.cell.styles.fontStyle='bold';data.cell.styles.textColor=ink;}},didDrawPage:()=>{}});
  const pages=doc.getNumberOfPages();for(let page=1;page<=pages;page++){doc.setPage(page);doc.setDrawColor(226,226,232);doc.line(15,279,195,279);text('PharmaCast · Plan de compras',15,286,8,false,[130,130,140]);text(`${page} / ${pages}`,185,286,8,false,[130,130,140]);}
- doc.save(`plan-compras-${reference}.pdf`);
+ doc.save(purchaseExportFilename(reference, "pdf"));
 }
 export async function exportSavedPurchase(format:"pdf"|"csv",id:string,days:number){
  const [prediction, plan] = await Promise.all([
@@ -39,5 +40,5 @@ export async function exportSavedPurchase(format:"pdf"|"csv",id:string,days:numb
   }),
  ]);
  const products = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics);
- await exportPurchase(format, products.map(row => ({name:row.name,quantity:row.recommendedQty,priority:row.priority})), prediction.forecastPeriod, id.slice(0,8));
+ await exportPurchase(format, products.map(row => ({name:row.name,quantity:row.recommendedQty,priority:row.priority})), prediction.forecastPeriod, id);
 }
