@@ -3,7 +3,8 @@ import type { PredictionSummaryResponse } from "../../types/api";
 import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { matchesHistorySearch } from "../../lib/historyFilters";
 import {
   Calendar,
   Clock,
@@ -51,12 +52,21 @@ const statusConfig = {
 
 export function History() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [records, setRecords] = useState<PredictionUIRecord[]>(() => (peekCache<PredictionSummaryResponse[]>("history") ?? []).map(summaryToUIRecord));
   const [loading, setLoading] = useState(() => peekCache("history") === undefined);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [filterPeriod, setFilterPeriod] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const search = params.get("q") ?? "";
+  const filterPeriod = params.get("period") ?? "all";
+  const filterStatus = params.get("status") ?? "all";
+  const setFilter = (key: string, value: string) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (!value || value === "all") next.delete(key); else next.set(key, value);
+    return next;
+  }, { replace: true });
+  const setSearch = (value: string) => setFilter("q", value);
+  const setFilterPeriod = (value: string) => setFilter("period", value);
+  const setFilterStatus = (value: string) => setFilter("status", value);
 
   const loadHistory = useCallback(async () => {
     setLoading(peekCache("history") === undefined);
@@ -76,11 +86,7 @@ export function History() {
   }, [loadHistory]);
 
   const filtered = records.filter((rec) => {
-    const matchSearch =
-      search === "" ||
-      rec.datasetName.toLowerCase().includes(search.toLowerCase()) ||
-      rec.id.toLowerCase().includes(search.toLowerCase()) ||
-      new Date(rec.date).toLocaleDateString("es-ES").includes(search);
+    const matchSearch = matchesHistorySearch(rec, search);
     const matchPeriod =
       filterPeriod === "all" || rec.forecastPeriod.toString() === filterPeriod;
     const matchStatus =
@@ -95,13 +101,13 @@ export function History() {
       year: "numeric",
     });
 
-  const completedCount = records.filter(
+  const completedCount = filtered.filter(
     (r) => r.status === ExecutionStatus.Completed
   ).length;
-  const failedCount = records.filter(
+  const failedCount = filtered.filter(
     (r) => r.status === ExecutionStatus.Failed
   ).length;
-  const pendingCount = records.filter(
+  const pendingCount = filtered.filter(
     (r) =>
       r.status === ExecutionStatus.Pending ||
       r.status === ExecutionStatus.Processing
@@ -121,7 +127,7 @@ export function History() {
         {[
           {
             label: "Total predicciones",
-            value: records.length.toString(),
+            value: filtered.length.toString(),
             icon: BarChart3,
             color: "text-blue-500",
             bg: "bg-blue-500/10 border-blue-500/20",
@@ -189,7 +195,7 @@ export function History() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por dataset o ID..."
+            placeholder="Buscar por dataset, ID o fecha..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl border border-gray-300 bg-white pl-9 pr-4 py-2.5 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
@@ -287,7 +293,7 @@ export function History() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: i * 0.06 }}
-                onClick={() => navigate(`/historial/${record.id}`)}
+                onClick={() => navigate(`/historial/${record.id}${params.size ? `?${params.toString()}` : ""}`)}
                 className="history-record text-left module-card rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-md transition-all group shadow-sm"
               >
                 {/* Card header */}
