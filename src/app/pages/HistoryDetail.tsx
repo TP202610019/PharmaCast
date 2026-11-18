@@ -545,7 +545,7 @@ export function HistoryDetail() {
                       {planEvalResult.summary.pharmaCastGoodPct}%
                     </p>
                     <p className="text-blue-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                      {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmaCastWape}%
+                      {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmaCastWape == null ? "No disponible" : `${planEvalResult.summary.pharmaCastWape}%`}
                     </p>
                   </div>
                   {planEvalResult.summary.hasPharmacyPlan && (
@@ -555,7 +555,7 @@ export function HistoryDetail() {
                         {planEvalResult.summary.pharmacyGoodPct}%
                       </p>
                       <p className="text-orange-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                        {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmacyWape ?? "—"}%
+                        {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmacyWape == null ? "No disponible" : `${planEvalResult.summary.pharmacyWape}%`}
                       </p>
                     </div>
                   )}

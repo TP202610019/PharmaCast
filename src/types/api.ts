@@ -295,7 +295,7 @@ export interface PlanEvaluationItem {
   pharmacyPlan: number | null;
   pharmaCastAccuracy: 'good' | 'ok' | 'poor';
   pharmacyAccuracy: 'good' | 'ok' | 'poor' | null;
-  wape: number;
+  wape: number | null;
   pharmacyWape: number | null;
   sobrestockSoles: number;
   desabastoSoles: number;
@@ -311,7 +311,7 @@ export interface PlanEvaluationSummary {
   hasPrice: boolean;
   pharmaCastGoodPct: number;
   pharmacyGoodPct: number;
-  pharmaCastWape: number;
+  pharmaCastWape: number | null;
   pharmacyWape: number | null;
   pharmaCastTotalSobrestockSoles: number;
   pharmaCastTotalDesabastoSoles: number;
