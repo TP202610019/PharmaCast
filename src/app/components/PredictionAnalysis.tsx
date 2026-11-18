@@ -11,7 +11,7 @@ import { buildChartFromBackendPoints, extractAccuracy, forecastResultsToProducts
 import { exportPurchase, priorityRank } from "../../lib/purchaseExport";
 import type { PredictionResponse, PurchasePlanResponse } from "../../types/api";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 5;
 const number = (value: number) => value.toLocaleString("es-PE", { maximumFractionDigits: 2 });
 const labels = { critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo" };
 
@@ -139,7 +139,7 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
   const accuracy = prediction ? extractAccuracy(prediction.metrics) : null;
   const hasStock = products.some(row => row.hasInventory);
   const purchaseUnavailable = view === "purchase" && !plan && !planMissing;
-  const exportPlan = (format: "pdf" | "csv") => exportPurchase(format, products.map(row => ({ name: row.name, quantity: row.recommendedQty, priority: row.priority })), days, executionId.slice(0, 8));
+  const exportPlan = (format: "pdf" | "csv") => exportPurchase(format, products.map(row => ({ name: row.name, quantity: row.recommendedQty, priority: row.priority })), days, executionId);
   const retryPlan = async () => {
     if (!preparePlan) { setAttempt(value => value + 1); return; }
     setPlanLoading(true); setPlanError(""); setPlanMissing(false);
