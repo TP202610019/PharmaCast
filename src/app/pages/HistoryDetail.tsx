@@ -3,7 +3,7 @@ import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
 import { AnalysisTabs } from "../components/AnalysisLayout";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Calendar, Clock, AlertCircle, Download, Package, BarChart3, CheckCircle, Loader2, ClipboardList, ClipboardCheck, UploadCloud, X, FileText } from "lucide-react";
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart } from "recharts";
 import { motion } from "motion/react";
@@ -17,11 +17,14 @@ import { extractApiErrorMessage } from "../context/AuthContext";
 export function HistoryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [historyParams] = useSearchParams();
+  const historyPath = `/historial${historyParams.size ? `?${historyParams.toString()}` : ""}`;
 
   // ── Core data ──
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
 
   // ── UI ──
   const [activeTab, setActiveTab] = useState<"dashboard" | "purchase" | "evaluation">("dashboard");
@@ -50,7 +53,6 @@ export function HistoryDetail() {
   const [pharmColsLoading, setPharmColsLoading] = useState(false);
   const salesFileRef = useRef<HTMLInputElement>(null);
   const pharmFileRef = useRef<HTMLInputElement>(null);
-  const planIdLoadStarted = useRef(false);
   const evalResultRef = useRef<HTMLDivElement>(null);
   const [planSampleNames, setPlanSampleNames] = useState<string[]>([]);
   const [csvSampleNames, setCsvSampleNames] = useState<string[]>([]);
@@ -60,11 +62,19 @@ export function HistoryDetail() {
     if (!id) return;
     setLoading(true);
     setError("");
+    setNotFound(false);
+    setSummary(null);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
     try {
       const summaryData = await dashboardService.getPredictionSummary(id);
       setSummary(summaryData);
     } catch (err) {
-      setError(extractApiErrorMessage(err, "No se pudo cargar la predicción."));
+      if ((err as { status?: number }).status === 404) setNotFound(true);
+      else setError("No se pudo cargar la predicción. Vuelve a intentarlo.");
     } finally {
       setLoading(false);
     }
@@ -76,19 +86,37 @@ export function HistoryDetail() {
 
   // ── Load purchase plan ID when purchase or evaluation tab opens ──
   useEffect(() => {
-    if ((activeTab !== "purchase" && activeTab !== "evaluation") || !id || planIdLoadStarted.current) return;
-    planIdLoadStarted.current = true;
+    if ((activeTab !== "purchase" && activeTab !== "evaluation") || !id) return;
+    let active = true;
     setPurchasePlanIdLoading(true);
+    setPurchasePlanId(null);
+    setPlanEvalResult(null);
     purchasePlanService.getByExecution(id)
       .then((p) => {
+        if (!active) return;
         setPurchasePlanId(p.id);
         // keep up to 5 sample product names so we can show them in diagnostics
         const samples = (p.items ?? []).slice(0, 5).map((i: { productName: string }) => i.productName);
         setPlanSampleNames(samples);
       })
-      .catch(() => {})
-      .finally(() => setPurchasePlanIdLoading(false));
+      .catch((error: { status?: number }) => {
+        if (active && error.status !== 404) setPlanEvalError("No se pudo cargar el plan guardado. Vuelve a abrir esta pestaña para reintentar.");
+      })
+      .finally(() => { if (active) setPurchasePlanIdLoading(false); });
+    return () => { active = false; };
   }, [activeTab, id]);
+
+  useEffect(() => {
+    if (activeTab !== "evaluation" || !purchasePlanId) return;
+    let active = true;
+    setPlanEvalError("");
+    setPlanEvalLoading(true);
+    purchasePlanService.getLatestEvaluation(purchasePlanId)
+      .then(result => { if (active) setPlanEvalResult(result); })
+      .catch(() => { if (active) setPlanEvalError("No se pudo recuperar la evaluación guardada. Vuelve a abrir esta pestaña para reintentar."); })
+      .finally(() => { if (active) setPlanEvalLoading(false); });
+    return () => { active = false; };
+  }, [activeTab, purchasePlanId]);
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
@@ -97,7 +125,7 @@ export function HistoryDetail() {
   if (loading) return <WorkspaceLoading label="Cargando predicción…" />;
 
   // ── Error / no data state ──
-  if (error || !summary?.latestPredictionId) return <WorkspaceError title={error ? "Error al cargar la predicción" : "Predicción no encontrada"} message={error || "El análisis solicitado no está disponible."} onRetry={error ? loadData : undefined} onBack={() => navigate("/historial")} />;
+  if (notFound || error || !summary?.latestPredictionId) return <WorkspaceError title={error ? "Error al cargar la predicción" : "Predicción no encontrada"} message={error || "La predicción solicitada no existe o no está disponible."} onRetry={error ? loadData : undefined} onBack={() => navigate(historyPath)} />;
 
   const parseCsvHeaders = (file: File): Promise<string[]> =>
     new Promise((resolve) => {
@@ -195,7 +223,7 @@ export function HistoryDetail() {
   return (
     <div className="history-detail-page workspace-page">
 
-      <button className="module-back" onClick={() => navigate("/historial")}><ArrowLeft size={14}/>Volver al historial</button>
+      <button className="module-back" onClick={() => navigate(historyPath)}><ArrowLeft size={14}/>Volver al historial</button>
       {/* Header */}
       <div className="module-heading detail-heading">
         <div className="flex items-start gap-4">

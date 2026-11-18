@@ -76,8 +76,9 @@ export const purchasePlanService = {
         `/api/purchase-plans/${planId}/evaluation/latest`
       );
       return data.data ?? null;
-    } catch {
-      return null; // 404 = no evaluation saved yet
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null;
+      throw error;
     }
   },
 };
