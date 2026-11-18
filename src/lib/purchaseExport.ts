@@ -2,14 +2,18 @@ import { predictionService } from "../services/prediction.service";
 import { purchasePlanService } from "../services/purchase-plan.service";
 import { forecastResultsToProducts } from "./transforms";
 import { purchaseExportFilename } from "./exportFilename";
-export type PurchaseRow = {name:string; quantity:number; priority:string};
+export type PurchaseRow = {name:string; quantity:number; priority:string; demand:number; category?:string|null; stock?:number|null};
 const labels:Record<string,string>={critical:"Crítico",high:"Alto",medium:"Medio",low:"Bajo"};
 export const priorityRank:Record<string,number>={critical:0,high:1,medium:2,low:3};
 export async function exportPurchase(format:"pdf"|"csv", rows:PurchaseRow[], days:number, reference:string) {
  const sorted=[...rows].sort((a,b)=>(priorityRank[a.priority]??4)-(priorityRank[b.priority]??4)||a.name.localeCompare(b.name));
- const body=sorted.map(r=>[r.name,String(Math.ceil(r.quantity)),labels[r.priority]??r.priority]);
+ const headers = ["Medicamento", "Categoría", "Stock actual", "Demanda prevista", "Cantidad sugerida", "Prioridad"];
+ const body = sorted.map(row => [
+  row.name, row.category || "—", row.stock == null ? "—" : String(row.stock),
+  String(row.demand), String(row.quantity), labels[row.priority] ?? row.priority,
+ ]);
  if(format==="csv"){
-  const csv="\uFEFF"+[["Medicamento","Cantidad sugerida","Prioridad"],...body].map(row=>row.map(v=>'"'+v.replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const csv="\uFEFF"+[headers,...body].map(row=>row.map(v=>'"'+v.replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));const a=document.createElement('a');a.href=url;a.download=purchaseExportFilename(reference, "csv");a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
  }
  const [{jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')]);
@@ -27,7 +31,7 @@ export async function exportPurchase(format:"pdf"|"csv", rows:PurchaseRow[], day
  const metrics=[['HORIZONTE',`${days} días`],['MEDICAMENTOS',String(sorted.length)],['PRIORIDAD CRÍTICA',String(critical)]];
  metrics.forEach(([label,value],i)=>{const x=15+i*62;text(label,x,70,8,false,[110,110,120]);text(value,x,81,18,true);});
  text('Detalle de reposición',15,99,12,true);text('Ordenado de mayor a menor prioridad',15,106,9,false,[110,110,120]);
- autoTable(doc,{startY:114,head:[['MEDICAMENTO','CANTIDAD SUGERIDA','PRIORIDAD']],body,styles:{font:'helvetica',fontSize:10,cellPadding:4.5,textColor:ink,lineColor:[235,235,240],lineWidth:{bottom:0.2}},headStyles:{fillColor:[255,255,255],textColor:ink,fontStyle:'bold',fontSize:8,lineWidth:{bottom:0.5},lineColor:[210,210,220]},alternateRowStyles:{fillColor:[250,250,252]},columnStyles:{0:{cellWidth:93},1:{halign:'right',cellWidth:49},2:{cellWidth:38}},margin:{top:22,bottom:24,left:15,right:15},rowPageBreak:'avoid',didParseCell:data=>{if(data.section==='body'&&data.column.index===2){data.cell.styles.fontStyle='bold';data.cell.styles.textColor=ink;}},didDrawPage:()=>{}});
+ autoTable(doc,{startY:114,head:[headers],body,styles:{font:'helvetica',fontSize:10,cellPadding:4.5,textColor:ink,lineColor:[235,235,240],lineWidth:{bottom:0.2}},headStyles:{fillColor:[255,255,255],textColor:ink,fontStyle:'bold',fontSize:8,lineWidth:{bottom:0.5},lineColor:[210,210,220]},alternateRowStyles:{fillColor:[250,250,252]},columnStyles:{0:{cellWidth:47},1:{halign:'right',cellWidth:49},2:{cellWidth:38}},margin:{top:22,bottom:24,left:15,right:15},rowPageBreak:'avoid',didParseCell:data=>{if(data.section==='body'&&data.column.index===5){data.cell.styles.fontStyle='bold';data.cell.styles.textColor=ink;}},didDrawPage:()=>{}});
  const pages=doc.getNumberOfPages();for(let page=1;page<=pages;page++){doc.setPage(page);doc.setDrawColor(226,226,232);doc.line(15,279,195,279);text('PharmaCast · Plan de compras',15,286,8,false,[130,130,140]);text(`${page} / ${pages}`,185,286,8,false,[130,130,140]);}
  doc.save(purchaseExportFilename(reference, "pdf"));
 }
@@ -39,6 +43,11 @@ export async function exportSavedPurchase(format:"pdf"|"csv",id:string,days:numb
    throw error;
   }),
  ]);
- const products = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics);
- await exportPurchase(format, products.map(row => ({name:row.name,quantity:row.recommendedQty,priority:row.priority})), prediction.forecastPeriod, id);
+ const products = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics, prediction.forecastPeriod, true);
+ const savedItems = new Map(plan?.items.map(item => [item.productName, item]));
+ await exportPurchase(format, products.map(row => ({
+  name: row.name, quantity: row.recommendedQty, priority: row.priority,
+  demand: row.totalPredicted, category: savedItems.get(row.name)?.category,
+  stock: savedItems.get(row.name)?.stockActual,
+ })), prediction.forecastPeriod, id);
 }

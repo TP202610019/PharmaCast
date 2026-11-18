@@ -249,6 +249,9 @@ export interface PredictionResponse {
 }
 
 export interface PredictionSummaryResponse {
+  totalProducts?: number | null;
+  totalUnits?: number | null;
+  accuracy?: number | null;
   id: string;
   datasetId: string;
   datasetName: string;

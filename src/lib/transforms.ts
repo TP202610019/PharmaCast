@@ -41,7 +41,8 @@ export function forecastResultsToProducts(
   forecastResults: ForecastResultResponse[],
   purchasePlanItems: PurchasePlanItemResponse[],
   metrics?: PredictionMetricResponse[],
-  forecastPeriod?: number
+  forecastPeriod?: number,
+  preferSavedDemand = false
 ): UIProduct[] {
   const productMap = new Map<string, { total: number; count: number }>();
 
@@ -78,8 +79,9 @@ export function forecastResultsToProducts(
   const products: UIProduct[] = [];
 
   for (const [name, agg] of productMap) {
-    const avgPredicted = agg.total / Math.max(forecastPeriod ?? agg.count, 1);
     const planItem = planMap.get(name);
+    const totalPredicted = preferSavedDemand ? planItem?.demandPredicted ?? agg.total : agg.total;
+    const avgPredicted = totalPredicted / Math.max(forecastPeriod ?? agg.count, 1);
 
     const priority = priorities.get(name) ?? "low";
 
@@ -96,7 +98,7 @@ export function forecastResultsToProducts(
         ? planItem.estimatedCost / Math.max(planItem.recommendedQuantity, 1)
         : 0,
       historicalAvg: historicalMap.get(name) ?? null,
-      totalPredicted: agg.total,
+      totalPredicted,
     });
   }
 
@@ -241,10 +243,9 @@ export interface PredictionUIRecord {
   id: string;
   date: string;
   forecastPeriod: number;
-  totalProducts: number;
-  criticalItems: number;
-  accuracy: number;
-  totalUnits: number;
+  totalProducts: number | null;
+  accuracy: number | null;
+  totalUnits: number | null;
   status: ExecutionStatus;
   datasetName: string;
 }
@@ -254,10 +255,9 @@ export function summaryToUIRecord(s: PredictionSummaryResponse): PredictionUIRec
     id: s.id,
     date: s.createdAt,
     forecastPeriod: s.forecastPeriod,
-    totalProducts: 0,
-    criticalItems: 0,
-    accuracy: 0,
-    totalUnits: 0,
+    totalProducts: s.totalProducts ?? null,
+    accuracy: s.accuracy ?? null,
+    totalUnits: s.totalUnits ?? null,
     status: s.executionStatus,
     datasetName: s.datasetName,
   };

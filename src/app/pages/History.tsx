@@ -112,6 +112,10 @@ export function History() {
       r.status === ExecutionStatus.Pending ||
       r.status === ExecutionStatus.Processing
   ).length;
+  const availablePrecisions = filtered.flatMap(record => record.accuracy == null ? [] : [record.accuracy]);
+  const averagePrecision = availablePrecisions.length
+    ? availablePrecisions.reduce((sum, value) => sum + value, 0) / availablePrecisions.length
+    : null;
 
   if (loading) return <WorkspaceLoading label="Cargando historial…" />;
 
@@ -187,6 +191,12 @@ export function History() {
           );
         })}
       </div>
+
+      <p className="text-sm text-gray-500">
+        Precisión promedio de los resultados filtrados: {averagePrecision == null
+          ? "No disponible"
+          : `${averagePrecision.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}
+      </p>
 
       {/* Filters */}
       <div className="history-filters flex flex-wrap gap-3 items-center">
@@ -375,6 +385,13 @@ export function History() {
                 </div>
 
                 {/* Footer */}
+                {record.status === ExecutionStatus.Completed && (
+                  <dl className="grid grid-cols-3 gap-2 mb-4 text-xs text-gray-500">
+                    <div><dt>Productos</dt><dd>{record.totalProducts?.toLocaleString("es-PE") ?? "—"}</dd></div>
+                    <div><dt>Unidades previstas</dt><dd>{record.totalUnits?.toLocaleString("es-PE", { maximumFractionDigits: 2 }) ?? "—"}</dd></div>
+                    <div><dt>Precisión</dt><dd>{record.accuracy == null ? "—" : `${record.accuracy.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}</dd></div>
+                  </dl>
+                )}
                 <div className="flex items-center justify-end pt-3 border-t border-gray-100">
                   <div className="flex items-center gap-1 text-gray-400 group-hover:text-blue-500 transition-colors">
                     <span style={{ fontSize: "0.75rem" }}>Ver detalles</span>

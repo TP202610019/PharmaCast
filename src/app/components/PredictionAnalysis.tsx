@@ -98,7 +98,7 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
 
   const products = useMemo(() => {
     if (!prediction) return [];
-    const rows = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics, prediction.forecastPeriod);
+    const rows = forecastResultsToProducts(prediction.forecastResults, plan?.items ?? [], prediction.productMetrics ?? prediction.metrics, prediction.forecastPeriod, view === "purchase");
     const summaries = new Map(prediction.productSummaries?.map(row => [row.productName, row]));
     return rows.map(row => {
       const summary = summaries.get(row.name);
@@ -106,7 +106,7 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
       return { ...row, historicalAvg: historical,
         variation: summary?.variationPercent ?? (historical != null && historical > 0 ? (row.predictedDemand - historical) / historical * 100 : null) };
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [prediction, plan]);
+  }, [prediction, plan, view]);
 
   useEffect(() => { setSelected(""); setPage(1); }, [executionId]);
   useEffect(() => { setPage(1); setSearch(""); }, [view]);
@@ -139,7 +139,14 @@ export function PredictionAnalysis({ executionId, view, initialPrediction, initi
   const accuracy = prediction ? extractAccuracy(prediction.metrics) : null;
   const hasStock = products.some(row => row.hasInventory);
   const purchaseUnavailable = view === "purchase" && !plan && !planMissing;
-  const exportPlan = (format: "pdf" | "csv") => exportPurchase(format, products.map(row => ({ name: row.name, quantity: row.recommendedQty, priority: row.priority })), days, executionId);
+  const exportPlan = (format: "pdf" | "csv") => {
+    const savedItems = new Map(plan?.items.map(item => [item.productName, item]));
+    return exportPurchase(format, products.map(row => ({
+      name: row.name, quantity: row.recommendedQty, priority: row.priority,
+      demand: row.totalPredicted, category: savedItems.get(row.name)?.category,
+      stock: savedItems.get(row.name)?.stockActual,
+    })), days, executionId);
+  };
   const retryPlan = async () => {
     if (!preparePlan) { setAttempt(value => value + 1); return; }
     setPlanLoading(true); setPlanError(""); setPlanMissing(false);
