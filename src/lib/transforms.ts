@@ -40,7 +40,8 @@ export interface UIProduct {
 export function forecastResultsToProducts(
   forecastResults: ForecastResultResponse[],
   purchasePlanItems: PurchasePlanItemResponse[],
-  metrics?: PredictionMetricResponse[]
+  metrics?: PredictionMetricResponse[],
+  forecastPeriod?: number
 ): UIProduct[] {
   const productMap = new Map<string, { total: number; count: number }>();
 
@@ -77,7 +78,7 @@ export function forecastResultsToProducts(
   const products: UIProduct[] = [];
 
   for (const [name, agg] of productMap) {
-    const avgPredicted = agg.total / Math.max(agg.count, 1);
+    const avgPredicted = agg.total / Math.max(forecastPeriod ?? agg.count, 1);
     const planItem = planMap.get(name);
 
     const priority = priorities.get(name) ?? "low";
@@ -140,6 +141,27 @@ export function buildChartFromBackendPoints(
   _forecastPeriod: number,
   historicalPoints: DashboardHistoricalPoint[] = []
 ): ChartPoint[] {
+  // New forecasts already contain model-generated weekly blocks. Preserve each
+  // block, including a final partial week; never regroup its total by weekday.
+  if (backendPoints.some(p => p.periodEnd != null)) {
+    const forecast = [...backendPoints].sort((a, b) => a.date.localeCompare(b.date));
+    const origin = new Date(forecast[0].date.slice(0, 10) + "T00:00:00Z").getTime();
+    const dayMs = 86400000;
+    const history = new Map<number, number>();
+    for (const point of historicalPoints) {
+      const time = new Date(point.date.slice(0, 10) + "T00:00:00Z").getTime();
+      const block = Math.floor((time - origin) / (7 * dayMs));
+      history.set(block, (history.get(block) ?? 0) + point.quantity);
+    }
+    const range = (start: string, end: string) => `${formatChartDate(start)}–${formatChartDate(end)}`;
+    const past: ChartPoint[] = [...history.entries()].sort(([a], [b]) => a - b).map(([block, quantity]) => {
+      const start = new Date(origin + block * 7 * dayMs).toISOString();
+      const end = new Date(origin + (block * 7 + 6) * dayMs).toISOString();
+      return { date: range(start, end), weekRange: range(start, end), historical: quantity, predicted: null, upper: null, lower: null };
+    });
+    return [...past, ...forecast.map(p => ({ date: range(p.date, p.periodEnd!), weekRange: range(p.date, p.periodEnd!),
+      historical: null, predicted: p.predicted, upper: p.upper ?? null, lower: p.lower ?? null }))];
+  }
   const days = new Map<string, ChartPoint>();
   const pointFor = (value: string) => {
     const day = value.slice(0, 10);
