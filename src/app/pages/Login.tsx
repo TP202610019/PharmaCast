@@ -1,3 +1,4 @@
+import { authDestination } from "../../lib/authDestination";
 import { AuthFieldError } from "../components/AuthFieldError";
 import { AuthShell } from "../components/AuthShell";
 import { useState } from "react";
@@ -10,21 +11,23 @@ import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
 
 export function Login() {
   const navigate = useNavigate();
-  const { login, isLoggedIn } = useAuth();
-  const requestedPath = useLocation().state?.returnTo;
-  const destination = typeof requestedPath === "string"
-    && /^\/(panel|historial|predicciones\/nueva)(?:[/?#]|$)/.test(requestedPath)
-    && !requestedPath.includes("\\") ? requestedPath : "/panel";
+  const location = useLocation();
+  const destination = authDestination((location.state as { returnTo?: unknown } | null)?.returnTo);
+  const { login, loginDemo } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoError, setDemoError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || demoLoading) return;
     setError("");
+    setDemoError("");
     const invalidEmail = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
     setEmailError(invalidEmail ? "Ingresa un correo válido." : "");
     if (!password) setError("Ingresa tu contraseña.");
@@ -43,7 +46,24 @@ export function Login() {
     }
   };
 
-  if (isLoggedIn) return <Navigate to={destination} replace />;
+  const handleDemoLogin = async () => {
+    if (loading || demoLoading) return;
+    setDemoError("");
+    setError("");
+    setEmailError("");
+    setDemoLoading(true);
+    try {
+      await loginDemo();
+      navigate(destination, { replace: true });
+    } catch (err) {
+      setDemoError((err as { status?: number } | null)?.status === 401
+        ? "La cuenta demo no está disponible por el momento."
+        : extractApiErrorMessage(err, "No se pudo acceder a la cuenta demo."));
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
   return <AuthShell mode="login"><div className="auth-form">
           <div className="mb-8">
             <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.875rem", fontWeight: 700 }}>
@@ -80,7 +100,7 @@ export function Login() {
                 <Link
                   to="/acceso/recuperar"
                   className="text-blue-500 hover:text-blue-600 transition-colors"
-                  style={{ fontSize: "0.8125rem" }}
+                  style={{ fontSize: "0.75rem", fontWeight: 600 }}
                 >
                   ¿Olvidaste tu contraseña?
                 </Link>
@@ -109,7 +129,7 @@ export function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || demoLoading}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ fontWeight: 600, fontSize: "0.9375rem" }}
             >
@@ -129,6 +149,22 @@ export function Login() {
               )}
             </button>
           </form>
+
+          <div className="my-5 flex items-center gap-3" aria-hidden="true">
+            <span className="h-px flex-1 bg-gray-200" />
+            <span className="text-xs text-gray-400">o</span>
+            <span className="h-px flex-1 bg-gray-200" />
+          </div>
+          <button
+            type="button"
+            onClick={handleDemoLogin}
+            disabled={loading || demoLoading}
+            className="w-full rounded-full border border-gray-300 px-5 py-3 text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ fontSize: "0.8125rem", fontWeight: 500 }}
+          >
+            {demoLoading ? "Accediendo a la cuenta demo..." : "Acceder con cuenta demo"}
+          </button>
+          <AuthFieldError message={demoError} />
 
           <p className="text-center text-gray-500 mt-8" style={{ fontSize: "0.9375rem" }}>
             ¿No tienes una cuenta?{" "}

@@ -56,3 +56,22 @@
 
 /* Auth branding scrolls with the page; public navigation keeps its fixed behavior. */
 .auth-page{position:relative}.auth-page .pc-navbar.pc-auth-plain{position:absolute}
+
+/* Keep the registration story independent of the form's changing height. */
+@media(min-width:768px){
+  .auth-register .auth-context{
+    align-self:start;
+    min-height:calc(100dvh - 172px);
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+}
+
+/* Compact spacing below access and registration headings. */
+.auth-page.auth-login .auth-form>div:first-child,
+.auth-page.auth-register .auth-form>div:first-child{margin-bottom:14px}
+
+/* Keep recovery feedback close to the field without shifting the submit button. */
+.auth-recovery-email-form{display:flex;flex-direction:column;gap:8px}
+.auth-recovery-email-feedback{min-height:40px;display:flex;flex-direction:column;gap:3px;padding-top:2px}

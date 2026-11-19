@@ -207,3 +207,24 @@ test('an old history request cannot overwrite cache after a new prediction is sa
   finishOld(['old-execution']); await old;
   assert.deepEqual(cache.peekCache('history'), ['new-execution']);
 });
+const { isDemoEmail, isDemoWrite } = await load('src/lib/demoAccess.ts');
+test('demo allows reads and session actions but blocks data mutations', () => {
+  assert.equal(isDemoEmail(' TEST@pharmacy.dev '), true);
+  assert.equal(isDemoEmail('regular@example.com'), false);
+  assert.equal(isDemoWrite('GET', '/api/predictions/history'), false);
+  for (const action of ['login', 'register', 'refresh', 'logout']) assert.equal(isDemoWrite('POST', `/api/auth/${action}`), false);
+  for (const [method, url] of [['POST','/api/datasets/upload'],['POST','/api/predictions'],['DELETE','/api/datasets/example'],['PUT','/api/auth/profile']]) assert.equal(isDemoWrite(method, url), true);
+});
+test('history pagination handles six records per page and the final partial page', () => {
+  const first = renderToStaticMarkup(React.createElement(AnalysisPaginator, { page:1,total:23,pageSize:6,label:'Paginación del historial',onChange:()=>{} }));
+  const last = renderToStaticMarkup(React.createElement(AnalysisPaginator, { page:4,total:23,pageSize:6,label:'Paginación del historial',onChange:()=>{} }));
+  assert.match(first, /1–6 de 23/);
+  assert.match(last, /19–23 de 23/);
+  assert.match(first, /Paginación del historial/);
+});
+
+const { authDestination } = await load('src/lib/authDestination.ts');
+test('login returns to the original permitted route and rejects external or unknown destinations', () => {
+  for (const url of ['/historial','/historial/analysis-1','/historial?estado=completado#lista','/predicciones/nueva','/panel']) assert.equal(authDestination(url), url);
+  for (const url of [undefined,null,'https://example.com','//example.com','/admin','/acceso','/historial/../acceso','/panelx']) assert.equal(authDestination(url), '/panel');
+});

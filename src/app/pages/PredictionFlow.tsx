@@ -1,3 +1,4 @@
+import { requestDemoAccess } from "../../lib/demoAccess";
 import { validateLocalDataset } from "../../lib/validateLocalDataset";
 import { PredictionAnalysis } from "../components/PredictionAnalysis";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
@@ -61,7 +62,7 @@ interface UploadedFile {
 
 export function PredictionFlow() {
   const navigate = useNavigate();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, isDemo, user } = useAuth();
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const uploadLock = useRef(false);
   const uploadVersions = useRef({ sales: 0, inventory: 0 });
@@ -222,6 +223,7 @@ export function PredictionFlow() {
   /* ── File upload handler ── */
   const uploadFile = useCallback(
     async (file: File, type: "sales" | "inventory") => {
+      if (isDemo) { requestDemoAccess(); return; }
       if (uploadLock.current) return;
       const version = ++uploadVersions.current[type];
       const isCurrent = () => uploadVersions.current[type] === version;
@@ -252,7 +254,7 @@ export function PredictionFlow() {
         setUploadError(`${file.name}: ${msg}`);
       }
     },
-    [] // no closure deps — all setters are stable references from useState
+    [isDemo]
   );
 
   const detectFileType = (name: string, index: number): "sales" | "inventory" => {
@@ -425,6 +427,7 @@ export function PredictionFlow() {
   });
 
   const handleNext = async () => {
+    if (isDemo) { requestDemoAccess(); return; }
     if (uploadLock.current || !canProceed()) return;
     if (currentStep === 1) {
       uploadLock.current = true;

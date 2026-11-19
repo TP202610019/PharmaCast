@@ -1,3 +1,4 @@
+import { isDemoEmail, isDemoWrite, requestDemoAccess } from "./demoAccess";
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type { ApiResponse, ApiError, RefreshTokenRequest } from "../types/api";
 
@@ -48,6 +49,12 @@ const http = axios.create({
 // ─── Request interceptor: inject access token ─────────────────────────────────
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getAccessToken();
+  let demoSession = false;
+  try { demoSession = !!token && isDemoEmail(JSON.parse(localStorage.getItem(STORAGE.USER) || "null")?.email); } catch { /* Server still enforces demo access. */ }
+  if (demoSession && isDemoWrite(config.method ?? "get", config.url ?? "")) {
+    requestDemoAccess();
+    return Promise.reject({ status: 403, code: "DEMO_READ_ONLY", message: "La cuenta demo solo permite consultar los análisis de ejemplo." });
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -73,6 +80,10 @@ function processQueue(error: unknown, token: string | null) {
 http.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiResponse<unknown>>) => {
+    if (error.response?.data?.code === "DEMO_READ_ONLY" || (error as unknown as ApiError).code === "DEMO_READ_ONLY") {
+      requestDemoAccess();
+      return Promise.reject(error.response ? buildApiError(error) : error);
+    }
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     const path = originalRequest?.url?.split("?")[0] ?? "";

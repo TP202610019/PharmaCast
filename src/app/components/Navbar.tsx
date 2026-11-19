@@ -1,8 +1,10 @@
+import { StartAccessButton } from "./StartAccessButton";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Activity, LogIn, LogOut, Menu, X, AlertTriangle, Settings, ChevronDown, Building2, ArrowUpRight, ArrowLeft } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
+import { requestDemoAccess } from "../../lib/demoAccess";
 import { SettingsModal } from "./SettingsModal";
 import "../../styles/chrome.css";
 import { PharmaCastLogo } from "./PharmaCastLogo";
@@ -23,7 +25,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
   const location = useLocation();
   const navigate = useNavigate();
   const workspace = /^\/(panel|predicciones|historial)(\/|$)/.test(location.pathname);
-  const { isLoggedIn, user, logout } = useAuth();
+  const { isLoggedIn, isDemo, user, logout } = useAuth();
   const showAccountNav = isLoggedIn && workspace;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(() => window.scrollY > 24);
@@ -177,7 +179,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                         {/* Menu items */}
                         <div className="p-1.5">
                           <button
-                            onClick={() => { setShowDropdown(false); setShowSettings(true); }}
+                            onClick={() => { setShowDropdown(false); if (isDemo) requestDemoAccess(); else setShowSettings(true); }}
                             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors text-left"
                             style={{ fontSize: "0.875rem" }}
                           >
@@ -198,7 +200,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                   </AnimatePresence>
                 </div>
               ) : (
-                <div className="pc-nav-actions"><Link to="/acceso" className="pc-signin">Iniciar sesión</Link><Link to="/registro" className="pc-start">Comenzar <ArrowUpRight size={15}/></Link></div>
+                <div className="pc-nav-actions"><Link to="/acceso" className="pc-signin">Iniciar sesión</Link><StartAccessButton className="pc-start">Comenzar <ArrowUpRight size={15}/></StartAccessButton></div>
               )}
             </div>
 
@@ -263,7 +265,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                 {showAccountNav ? (
                   <>
                     <button
-                      onClick={() => { setMobileOpen(false); setShowSettings(true); }}
+                      onClick={() => { setMobileOpen(false); if (isDemo) requestDemoAccess(); else setShowSettings(true); }}
                       className="w-full flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-gray-600 hover:bg-gray-50 transition-all"
                       style={{ fontSize: "0.875rem" }}
                     >
@@ -280,7 +282,7 @@ export function Navbar({ backLink, plain = false }: { backLink?: { to: string; l
                     </button>
                   </>
                 ) : (
-                  <div className="pc-mobile-actions"><Link to="/acceso" className="pc-signin" onClick={() => setMobileOpen(false)}>Iniciar sesión</Link><Link to="/registro" className="pc-start" onClick={() => setMobileOpen(false)}>Comenzar <ArrowUpRight size={16}/></Link></div>
+                  <div className="pc-mobile-actions"><Link to="/acceso" className="pc-signin" onClick={() => setMobileOpen(false)}>Iniciar sesión</Link><StartAccessButton className="pc-start">Comenzar <ArrowUpRight size={16}/></StartAccessButton></div>
                 )}
               </div>
             </motion.div>

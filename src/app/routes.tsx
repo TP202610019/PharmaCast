@@ -1,4 +1,5 @@
-import { createBrowserRouter, redirect, Navigate } from "react-router";
+import { authDestination } from "../lib/authDestination";
+import { createBrowserRouter, redirect, Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "./context/AuthContext";
 import { Root } from "./components/Root";
 import { Home } from "./pages/Home";
@@ -10,6 +11,14 @@ import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Terms } from "./pages/Terms";
+
+function GuestOnly() {
+  const { isLoggedIn } = useAuth();
+  const location = useLocation();
+  return isLoggedIn
+    ? <Navigate to={authDestination((location.state as { returnTo?: unknown } | null)?.returnTo)} replace />
+    : <Outlet />;
+}
 
 function NotFound() {
   const { isLoggedIn } = useAuth();
@@ -26,12 +35,11 @@ export const router = createBrowserRouter([
   { path: "/history", loader: () => redirect("/historial") },
   { path: "/history/:id", loader: ({ params }) => redirect(`/historial/${params.id}`) },
   {
-    path: "/acceso",
-    Component: Login,
-  },
-  {
-    path: "/registro",
-    Component: Register,
+    Component: GuestOnly,
+    children: [
+      { path: "/acceso", Component: Login },
+      { path: "/registro", Component: Register },
+    ],
   },
   {
     path: "/acceso/recuperar",

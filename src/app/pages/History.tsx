@@ -1,3 +1,4 @@
+import { AnalysisPaginator } from "../components/PredictionAnalysis";
 import { peekCache } from "../../lib/dashboardCache";
 import type { PredictionSummaryResponse } from "../../types/api";
 import { WorkspaceError } from "../components/WorkspaceError";
@@ -68,6 +69,7 @@ export function History() {
   const setSearch = (value: string) => setFilter("q", value);
   const setFilterPeriod = (value: string) => setFilter("period", value);
   const setFilterStatus = (value: string) => setFilter("status", value);
+  const [page, setPage] = useState(1);
 
   const loadHistory = useCallback(async () => {
     setLoading(peekCache("history") === undefined);
@@ -94,6 +96,11 @@ export function History() {
       filterStatus === "all" || rec.status.toString() === filterStatus;
     return matchSearch && matchPeriod && matchStatus;
   });
+
+  const pageSize = 6;
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
+  const visibleRecords = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => { setPage(1); }, [search, filterPeriod, filterStatus]);
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString("es-ES", {
@@ -295,7 +302,7 @@ export function History() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((record, i) => {
+          {visibleRecords.map((record, i) => {
             const cfg =
               statusConfig[record.status] ?? statusConfig[ExecutionStatus.Pending];
             const StatusIcon = cfg.icon;
@@ -409,6 +416,7 @@ export function History() {
           })}
         </div>
       )}
+      {filtered.length > 0 && <AnalysisPaginator page={currentPage} total={filtered.length} pageSize={pageSize} label="Paginación del historial" onChange={setPage} />}
     </div>
   );
 }

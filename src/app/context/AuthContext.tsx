@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, ReactNode } from "rea
 import { authService } from "../../services/auth.service";
 import { setTokens, clearTokens, getAccessToken, getRefreshToken, STORAGE } from "../../lib/http";
 import { invalidateDashboardCache } from "../../lib/dashboardCache";
+import { isDemoEmail } from "../../lib/demoAccess";
 import type { ApiError } from "../../types/api";
 
 export interface UserData {
@@ -13,6 +14,7 @@ export interface UserData {
 
 interface AuthContextType {
   isLoggedIn: boolean;
+  isDemo: boolean;
   user: UserData | null;
   login: (email: string, password: string) => Promise<void>;
   loginDemo: () => Promise<void>;
@@ -23,6 +25,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
+  isDemo: false,
   user: null,
   login: async () => {},
   loginDemo: async () => {},
@@ -75,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginDemo = useCallback(async () => {
     const email = import.meta.env.VITE_DEMO_EMAIL;
     const password = import.meta.env.VITE_DEMO_PASSWORD;
-    if (!import.meta.env.DEV || !email || !password) throw new Error("La cuenta demo no está configurada en este entorno.");
+    if (!email || !password) throw new Error("La cuenta demo no está configurada en este entorno.");
     await login(email, password);
   }, [login]);
 
@@ -134,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, user, login, loginDemo, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ isLoggedIn, isDemo: isLoggedIn && isDemoEmail(user?.email), user, login, loginDemo, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

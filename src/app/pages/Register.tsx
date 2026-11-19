@@ -16,8 +16,9 @@ import {
   Clock,
   ShoppingCart,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
+import type { ApiError } from "../../types/api";
 
 let termsDraft: { name: string; pharmacy: string; email: string } | undefined;
 
@@ -37,7 +38,7 @@ export function Register() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
   const [error, setError] = useState("");
-  const [duplicateEmail, setDuplicateEmail] = useState(false);
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
@@ -45,12 +46,14 @@ export function Register() {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
     setFieldErrors((prev) => ({ ...prev, [key]: undefined, ...(key === "password" ? { confirmPassword: undefined } : {}) }));
     setError("");
-    setDuplicateEmail(false);
+    if (key === "email") setEmailAlreadyRegistered(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
+    setEmailAlreadyRegistered(false);
 
     const errors: typeof fieldErrors = {};
     if (!form.name.trim()) errors.name = "Ingresa tu nombre.";
@@ -68,9 +71,12 @@ export function Register() {
       await register(form.name.trim(), form.email.trim(), form.password, form.pharmacy || "Mi Farmacia");
       navigate("/panel");
     } catch (err) {
-      const duplicate = (err as { status?: number } | null)?.status === 409;
-      setDuplicateEmail(duplicate);
-      setError(duplicate ? "Ya existe una cuenta con ese correo." : extractApiErrorMessage(err, "No se pudo crear la cuenta. Intenta de nuevo."));
+      if ((err as ApiError)?.status === 409) {
+        setEmailAlreadyRegistered(true);
+        setFieldErrors((prev) => ({ ...prev, email: "Este correo ya está registrado." }));
+      } else {
+        setError(extractApiErrorMessage(err, "No se pudo crear la cuenta. Intenta de nuevo."));
+      }
     } finally {
       setLoading(false);
     }
@@ -144,6 +150,18 @@ export function Register() {
                 />
               </div>
               <AuthFieldError message={fieldErrors.email} />
+              {emailAlreadyRegistered && (
+                <p className="text-left text-xs leading-4 text-gray-500">
+                  <Link to="/acceso" className="text-blue-500 hover:text-blue-600 transition-colors">
+                    Inicia sesión
+                  </Link>
+                  {" o "}
+                  <Link to="/acceso/recuperar" className="text-blue-500 hover:text-blue-600 transition-colors">
+                    recupera tu contraseña
+                  </Link>
+                </p>
+              )}
+
             </div>
 
             <div className="space-y-1.5">
@@ -172,15 +190,22 @@ export function Register() {
                 </button>
               </div>
               <AuthFieldError message={fieldErrors.password} />
-              {(passwordFocused || form.password.length > 0) && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="space-y-2 pt-1"
-                >
-                  <PasswordRequirements password={form.password} />
-                </motion.div>
-              )}
+              <AnimatePresence initial={false}>
+                {passwordFocused && (
+                  <motion.div
+                    key="password-requirements"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-2 pt-1">
+                      <PasswordRequirements password={form.password} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="space-y-1.5">
@@ -234,7 +259,6 @@ export function Register() {
             </p>
 
             <AuthFieldError message={error} />
-            {duplicateEmail && <p className="text-sm"><Link className="text-blue-600 underline" to="/acceso">Iniciar sesión</Link>{" · "}<Link className="text-blue-600 underline" to="/acceso/recuperar">Recuperar contraseña</Link></p>}
 
             <button
               type="submit"

@@ -15,7 +15,7 @@ export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [accountMissing, setAccountMissing] = useState(false);
+  const [accountNotFound, setAccountNotFound] = useState(false);
 
   // Code state
   const [code, setCode] = useState(["", "", "", "", "", ""]);
@@ -52,6 +52,7 @@ export function ForgotPassword() {
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setAccountNotFound(false);
     if (!email) { setError("Ingresa tu correo."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Formato de correo no válido."); return; }
     if (loading) return;
@@ -62,7 +63,7 @@ export function ForgotPassword() {
       startCooldown();
       setTimeout(() => inputRefs.current[0]?.focus(), 300);
     } catch (err) {
-      setAccountMissing((err as { status?: number } | null)?.status === 404);
+      setAccountNotFound((err as { status?: number } | null)?.status === 404);
       setError((err as { status?: number } | null)?.status === 502
         ? "No pudimos enviar el código."
         : (err as { status?: number } | null)?.status === 404
@@ -157,18 +158,22 @@ export function ForgotPassword() {
                   <p className="text-gray-500" style={{ fontSize: "0.9375rem" }}>Ingresa tu correo y te enviaremos un código de 6 dígitos</p>
                 </div>
 
-                <form noValidate onSubmit={handleEmailSubmit} className="space-y-5">
+                <form noValidate onSubmit={handleEmailSubmit} className="auth-recovery-email-form">
 
                   <div className="space-y-1.5">
                     <label className="text-gray-700" style={{ fontSize: "0.875rem", fontWeight: 500 }}>Correo electrónico</label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(""); }} placeholder="tu@farmacia.com"
+                      <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(""); setAccountNotFound(false); }} placeholder="tu@farmacia.com"
                         className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
                         style={{ fontSize: "0.9375rem" }} />
                     </div>
+                    <div className="auth-recovery-email-feedback" aria-live="polite">
                     <AuthFieldError message={error} />
-                    {error && accountMissing && <Link to="/registro" className="text-sm text-blue-600 underline">Crear una cuenta</Link>}
+                    {accountNotFound && <p className="text-xs leading-4 text-gray-500">
+                      <Link to="/registro" className="text-blue-500 hover:text-blue-600 transition-colors">Crear una cuenta</Link>
+                    </p>}
+                    </div>
                   </div>
                   <button type="submit" disabled={loading}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"

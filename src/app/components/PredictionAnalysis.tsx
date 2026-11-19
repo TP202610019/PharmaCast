@@ -16,13 +16,13 @@ const PAGE_SIZE = 5;
 const number = (value: number) => value.toLocaleString("es-PE", { maximumFractionDigits: 2 });
 const soles = (value: number) => value.toLocaleString("es-PE", { style: "currency", currency: "PEN" });
 
-export function AnalysisPaginator({ page, total, onChange }: { page: number; total: number; onChange: (page: number) => void }) {
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+export function AnalysisPaginator({ page, total, onChange, pageSize = PAGE_SIZE, label = "Paginación de productos" }: { page: number; total: number; onChange: (page: number) => void; pageSize?: number; label?: string }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(page, pages);
   const start = Math.max(1, Math.min(current - 2, pages - 4));
   if (!total) return null;
-  return <nav className="analysis-pagination" aria-label="Paginación de productos">
-    <span>{number((current - 1) * PAGE_SIZE + 1)}–{number(Math.min(current * PAGE_SIZE, total))} de {number(total)}</span>
+  return <nav className="analysis-pagination" aria-label={label}>
+    <span>{number((current - 1) * pageSize + 1)}–{number(Math.min(current * pageSize, total))} de {number(total)}</span>
     {pages > 1 && <div>
       <button aria-label="Página anterior" disabled={current === 1} onClick={() => onChange(current - 1)}><ChevronLeft size={16}/></button>
       {start > 1 && <><button onClick={() => onChange(1)}>1</button>{start > 2 && <span>…</span>}</>}
