@@ -65,9 +65,9 @@ function readCsv(text: string): LocalDatasetPreview {
 export async function inspectLocalDataset(file: File): Promise<LocalDatasetPreview> {
   const extension = file.name.split(".").pop()?.toLowerCase();
   if (!["csv", "xls", "xlsx"].includes(extension ?? ""))
-    throw new Error("Formato no permitido. Usa un archivo CSV, XLS o XLSX.");
+    throw new Error("Formato no permitido. Usa un archivo CSV, XLS o XLSX de hasta 50 MB.");
   if (!file.size) throw new Error("El archivo está vacío.");
-  if (file.size > 30 * 1024 * 1024) throw new Error("El archivo supera el límite de 30 MB.");
+  if (file.size > 50 * 1024 * 1024) throw new Error("El archivo supera el límite de 50 MB.");
   if (extension === "csv") return readCsv(await file.text());
   const bytes = new Uint8Array(await file.arrayBuffer());
   const signature = extension === "xlsx" ? [0x50, 0x4b, 0x03, 0x04] : [0xd0, 0xcf, 0x11, 0xe0];

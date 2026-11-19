@@ -26,13 +26,12 @@ export interface ChartPoint {
 export interface UIProduct {
   id: string;
   name: string;
-  category: string;
+  category: string | null;
   currentStock: number;
   predictedDemand: number;
   recommendedQty: number;
   hasInventory: boolean;
-  priority: "critical" | "high" | "medium" | "low";
-  unitCost: number;
+  priority: PurchasePlanItemResponse["priority"];
   historicalAvg: number | null;
   totalPredicted: number;
 }
@@ -42,7 +41,9 @@ export interface UIProduct {
 export function forecastResultsToProducts(
   forecastResults: ForecastResultResponse[],
   purchasePlanItems: PurchasePlanItemResponse[],
-  metrics?: PredictionMetricResponse[]
+  metrics?: PredictionMetricResponse[],
+  forecastPeriod?: number,
+  preferSavedDemand = false
 ): UIProduct[] {
   const productMap = new Map<string, { total: number; count: number }>();
 
@@ -68,36 +69,26 @@ export function forecastResultsToProducts(
     }
   }
 
-  // Match the server's volume ranking over the complete execution, never a visible page.
-  const ranked = [...productMap.entries()].filter(([, value]) => value.total > 0)
-    .sort(([a, av], [b, bv]) => bv.total - av.total || (a < b ? -1 : a > b ? 1 : 0));
-  const priorities = new Map<string, UIProduct["priority"]>(ranked.map(([name], index) => {
-    const fraction = index / ranked.length;
-    return [name, fraction < .15 ? "critical" : fraction < .40 ? "high" : fraction < .75 ? "medium" : "low"];
-  }));
   let idx = 0;
   const products: UIProduct[] = [];
 
   for (const [name, agg] of productMap) {
-    const avgPredicted = agg.total / Math.max(agg.count, 1);
     const planItem = planMap.get(name);
+    const totalPredicted = preferSavedDemand ? planItem?.demandPredicted ?? agg.total : agg.total;
+    const avgPredicted = totalPredicted / Math.max(forecastPeriod ?? agg.count, 1);
 
-    const priority = priorities.get(name) ?? "low";
 
     products.push({
       id: `product-${idx++}`,
       name,
-      category: planItem?.category ?? "General",
+      category: planItem?.category ?? null,
       currentStock: planItem?.stockActual ?? 0,
       predictedDemand: avgPredicted,
       recommendedQty: planItem?.recommendedQuantity ?? Math.ceil(agg.total),
       hasInventory: planItem?.stockActual != null,
-      priority,
-      unitCost: planItem?.estimatedCost
-        ? planItem.estimatedCost / Math.max(planItem.recommendedQuantity, 1)
-        : 0,
+      priority: planItem?.priority ?? null,
       historicalAvg: historicalMap.get(name) ?? null,
-      totalPredicted: agg.total,
+      totalPredicted,
     });
   }
 
@@ -118,7 +109,6 @@ export function buildProductChartData(
   if (!filtered.length) return [];
 
   return filtered.map((r) => {
-    const conf = Math.round(r.predictedQuantity * 0.11);
     return {
       date: formatChartDate(r.forecastDate),
       historical: null,
@@ -142,6 +132,27 @@ export function buildChartFromBackendPoints(
   _forecastPeriod: number,
   historicalPoints: DashboardHistoricalPoint[] = []
 ): ChartPoint[] {
+  // New forecasts already contain model-generated weekly blocks. Preserve each
+  // block, including a final partial week; never regroup its total by weekday.
+  if (backendPoints.some(p => p.periodEnd != null)) {
+    const forecast = [...backendPoints].sort((a, b) => a.date.localeCompare(b.date));
+    const origin = new Date(forecast[0].date.slice(0, 10) + "T00:00:00Z").getTime();
+    const dayMs = 86400000;
+    const history = new Map<number, number>();
+    for (const point of historicalPoints) {
+      const time = new Date(point.date.slice(0, 10) + "T00:00:00Z").getTime();
+      const block = Math.floor((time - origin) / (7 * dayMs));
+      history.set(block, (history.get(block) ?? 0) + point.quantity);
+    }
+    const range = (start: string, end: string) => `${formatChartDate(start)}–${formatChartDate(end)}`;
+    const past: ChartPoint[] = [...history.entries()].sort(([a], [b]) => a - b).map(([block, quantity]) => {
+      const start = new Date(origin + block * 7 * dayMs).toISOString();
+      const end = new Date(origin + (block * 7 + 6) * dayMs).toISOString();
+      return { date: range(start, end), weekRange: range(start, end), historical: quantity, predicted: null, upper: null, lower: null };
+    });
+    return [...past, ...forecast.map(p => ({ date: range(p.date, p.periodEnd!), weekRange: range(p.date, p.periodEnd!),
+      historical: null, predicted: p.predicted, upper: p.upper ?? null, lower: p.lower ?? null }))];
+  }
   const days = new Map<string, ChartPoint>();
   const pointFor = (value: string) => {
     const day = value.slice(0, 10);
@@ -213,13 +224,13 @@ export function relativeTime(dateStr: string): string {
 // ─── Build UI summary for a PredictionSummaryResponse ────────────────────────
 
 export interface PredictionUIRecord {
+  criticalCount: number | null;
   id: string;
   date: string;
   forecastPeriod: number;
-  totalProducts: number;
-  criticalItems: number;
-  accuracy: number;
-  totalUnits: number;
+  totalProducts: number | null;
+  accuracy: number | null;
+  totalUnits: number | null;
   status: ExecutionStatus;
   datasetName: string;
 }
@@ -229,10 +240,10 @@ export function summaryToUIRecord(s: PredictionSummaryResponse): PredictionUIRec
     id: s.id,
     date: s.createdAt,
     forecastPeriod: s.forecastPeriod,
-    totalProducts: 0,
-    criticalItems: 0,
-    accuracy: 0,
-    totalUnits: 0,
+    totalProducts: s.totalProducts ?? null,
+    criticalCount: s.criticalCount ?? null,
+    accuracy: s.accuracy ?? null,
+    totalUnits: s.totalUnits ?? null,
     status: s.executionStatus,
     datasetName: s.datasetName,
   };

@@ -3,7 +3,8 @@ import type { PredictionSummaryResponse } from "../../types/api";
 import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { matchesHistorySearch } from "../../lib/historyFilters";
 import {
   Calendar,
   Clock,
@@ -51,12 +52,22 @@ const statusConfig = {
 
 export function History() {
   const navigate = useNavigate();
+  const savedPredictionId = useLocation().state?.savedPredictionId as string | undefined;
+  const [params, setParams] = useSearchParams();
   const [records, setRecords] = useState<PredictionUIRecord[]>(() => (peekCache<PredictionSummaryResponse[]>("history") ?? []).map(summaryToUIRecord));
   const [loading, setLoading] = useState(() => peekCache("history") === undefined);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [filterPeriod, setFilterPeriod] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const search = params.get("q") ?? "";
+  const filterPeriod = params.get("period") ?? "all";
+  const filterStatus = params.get("status") ?? "all";
+  const setFilter = (key: string, value: string) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (!value || value === "all") next.delete(key); else next.set(key, value);
+    return next;
+  }, { replace: true });
+  const setSearch = (value: string) => setFilter("q", value);
+  const setFilterPeriod = (value: string) => setFilter("period", value);
+  const setFilterStatus = (value: string) => setFilter("status", value);
 
   const loadHistory = useCallback(async () => {
     setLoading(peekCache("history") === undefined);
@@ -76,11 +87,7 @@ export function History() {
   }, [loadHistory]);
 
   const filtered = records.filter((rec) => {
-    const matchSearch =
-      search === "" ||
-      rec.datasetName.toLowerCase().includes(search.toLowerCase()) ||
-      rec.id.toLowerCase().includes(search.toLowerCase()) ||
-      new Date(rec.date).toLocaleDateString("es-ES").includes(search);
+    const matchSearch = matchesHistorySearch(rec, search);
     const matchPeriod =
       filterPeriod === "all" || rec.forecastPeriod.toString() === filterPeriod;
     const matchStatus =
@@ -95,17 +102,21 @@ export function History() {
       year: "numeric",
     });
 
-  const completedCount = records.filter(
+  const completedCount = filtered.filter(
     (r) => r.status === ExecutionStatus.Completed
   ).length;
-  const failedCount = records.filter(
+  const failedCount = filtered.filter(
     (r) => r.status === ExecutionStatus.Failed
   ).length;
-  const pendingCount = records.filter(
+  const pendingCount = filtered.filter(
     (r) =>
       r.status === ExecutionStatus.Pending ||
       r.status === ExecutionStatus.Processing
   ).length;
+  const availablePrecisions = filtered.flatMap(record => record.accuracy == null ? [] : [record.accuracy]);
+  const averagePrecision = availablePrecisions.length
+    ? availablePrecisions.reduce((sum, value) => sum + value, 0) / availablePrecisions.length
+    : null;
 
   if (loading) return <WorkspaceLoading label="Cargando historial…" />;
 
@@ -113,6 +124,7 @@ export function History() {
 
   return (
     <div className="history-page workspace-page">
+      {savedPredictionId && <p role="status" className="text-sm text-emerald-700">La predicción quedó guardada en el historial.</p>}
       {error && <p role="status" className="text-sm text-red-500">No se pudo actualizar el historial. Se muestran los datos anteriores.</p>}
       <header className="module-heading"><div><h1>Historial de predicciones</h1><p>Revisa tus análisis anteriores y vuelve a cada resultado.</p></div><button className="module-primary" onClick={() => navigate("/predicciones/nueva")}><BarChart3 size={16}/>Nueva predicción</button></header>
 
@@ -121,7 +133,7 @@ export function History() {
         {[
           {
             label: "Total predicciones",
-            value: records.length.toString(),
+            value: filtered.length.toString(),
             icon: BarChart3,
             color: "text-blue-500",
             bg: "bg-blue-500/10 border-blue-500/20",
@@ -182,6 +194,12 @@ export function History() {
         })}
       </div>
 
+      <p className="text-sm text-gray-500">
+        Precisión promedio de los resultados filtrados: {averagePrecision == null
+          ? "No disponible"
+          : `${averagePrecision.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}
+      </p>
+
       {/* Filters */}
       <div className="history-filters flex flex-wrap gap-3 items-center">
         {/* Search */}
@@ -189,7 +207,7 @@ export function History() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por dataset o ID..."
+            placeholder="Buscar por dataset, ID o fecha..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl border border-gray-300 bg-white pl-9 pr-4 py-2.5 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500/60 transition-colors"
@@ -287,7 +305,7 @@ export function History() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: i * 0.06 }}
-                onClick={() => navigate(`/historial/${record.id}`)}
+                onClick={() => navigate(`/historial/${record.id}${params.size ? `?${params.toString()}` : ""}`)}
                 className="history-record text-left module-card rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-md transition-all group shadow-sm"
               >
                 {/* Card header */}
@@ -331,6 +349,10 @@ export function History() {
                 </div>
 
                 {/* Metrics row */}
+                {record.status === ExecutionStatus.Completed && <p className="mb-3 text-sm text-gray-600">
+                  Precisión {record.accuracy == null ? "—" : `${record.accuracy.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}
+                  {" · "}Productos {record.totalProducts ?? "—"}
+                </p>}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
                     <p
@@ -369,6 +391,13 @@ export function History() {
                 </div>
 
                 {/* Footer */}
+                {record.status === ExecutionStatus.Completed && (
+                  <dl className="grid grid-cols-3 gap-2 mb-4 text-xs text-gray-500">
+                    <div><dt>Productos</dt><dd>{record.totalProducts?.toLocaleString("es-PE") ?? "—"}</dd></div>
+                    <div><dt>Unidades previstas</dt><dd>{record.totalUnits?.toLocaleString("es-PE", { maximumFractionDigits: 2 }) ?? "—"}</dd></div>
+                    <div><dt>Precisión</dt><dd>{record.accuracy == null ? "—" : `${record.accuracy.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}</dd></div>
+                  </dl>
+                )}
                 <div className="flex items-center justify-end pt-3 border-t border-gray-100">
                   <div className="flex items-center gap-1 text-gray-400 group-hover:text-blue-500 transition-colors">
                     <span style={{ fontSize: "0.75rem" }}>Ver detalles</span>

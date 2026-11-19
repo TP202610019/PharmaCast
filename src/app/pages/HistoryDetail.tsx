@@ -3,7 +3,7 @@ import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { exportSavedPurchase } from "../../lib/purchaseExport";
 import { AnalysisTabs } from "../components/AnalysisLayout";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Calendar, Clock, AlertCircle, Download, Package, BarChart3, CheckCircle, Loader2, ClipboardList, ClipboardCheck, UploadCloud, X, FileText } from "lucide-react";
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart } from "recharts";
 import { motion } from "motion/react";
@@ -12,18 +12,30 @@ import { dashboardService } from "../../services/dashboard.service";
 import { predictionService } from "../../services/prediction.service";
 import { peekCache } from "../../lib/dashboardCache";
 import { purchasePlanService } from "../../services/purchase-plan.service";
-import { datasetService } from "../../services/dataset.service";
 import type { DashboardSummaryResponse, PlanEvaluationResponse } from "../../types/api";
 import { extractApiErrorMessage } from "../context/AuthContext";
+import { validateLocalDataset } from "../../lib/validateLocalDataset";
+
+const formatDifference = (value: number | null | undefined) =>
+  value == null ? "—" : value.toLocaleString("es-PE", { signDisplay: "exceptZero", maximumFractionDigits: 2 });
+const formatQuantity = (value: number) => value.toLocaleString("es-PE", { maximumFractionDigits: 2 });
+const formatGap = (value: number | null | undefined) => value != null && Number.isFinite(value)
+  ? `${formatQuantity(value)} uds`
+  : "No disponible";
+const formatReduction = (value: number | null | undefined) => value == null ? "No disponible"
+  : value === 0 ? "Sin cambio" : `${formatGap(Math.abs(value))} ${value > 0 ? "menos de brecha" : "más de brecha"}`;
 
 export function HistoryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [historyParams] = useSearchParams();
+  const historyPath = `/historial${historyParams.size ? `?${historyParams.toString()}` : ""}`;
 
   // ── Core data ──
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(() => peekCache<DashboardSummaryResponse>(`prediction-summary:${id}`) ?? null);
   const [loading, setLoading] = useState(() => !peekCache(`prediction-summary:${id}`));
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
 
   // ── UI ──
   const [activeTab, setActiveTab] = useState<"dashboard" | "purchase" | "evaluation">("dashboard");
@@ -35,6 +47,11 @@ export function HistoryDetail() {
   const [evalSalesFile, setEvalSalesFile] = useState<File | null>(null);
   const [evalSalesProdCol, setEvalSalesProdCol] = useState("");
   const [evalSalesQtyCol, setEvalSalesQtyCol] = useState("");
+  const [evalSalesDateCol, setEvalSalesDateCol] = useState("");
+  const [salesFileError, setSalesFileError] = useState("");
+  const [pharmacyFileError, setPharmacyFileError] = useState("");
+  const salesFileVersion = useRef(0);
+  const pharmacyFileVersion = useRef(0);
   const [evalPharmFile, setEvalPharmFile] = useState<File | null>(null);
   const [evalPharmProdCol, setEvalPharmProdCol] = useState("");
   const [evalPharmQtyCol, setEvalPharmQtyCol] = useState("");
@@ -46,13 +63,13 @@ export function HistoryDetail() {
   const [pharmColumns, setPharmColumns] = useState<string[]>([]);
   const [evalSalesPriceCol, setEvalSalesPriceCol] = useState("");
   const [chartLimit, setChartLimit] = useState<number>(20);
+  const [chartMode, setChartMode] = useState<"quantities" | "gaps">("quantities");
   const [salesDragging, setSalesDragging] = useState(false);
   const [pharmDragging, setPharmDragging] = useState(false);
   const [salesColsLoading, setSalesColsLoading] = useState(false);
   const [pharmColsLoading, setPharmColsLoading] = useState(false);
   const salesFileRef = useRef<HTMLInputElement>(null);
   const pharmFileRef = useRef<HTMLInputElement>(null);
-  const planIdLoadStarted = useRef(false);
   const evalResultRef = useRef<HTMLDivElement>(null);
   const [planSampleNames, setPlanSampleNames] = useState<string[]>([]);
   const [csvSampleNames, setCsvSampleNames] = useState<string[]>([]);
@@ -66,6 +83,12 @@ export function HistoryDetail() {
     setSummary(cached ?? null);
     setLoading(!cached);
     setError("");
+    setNotFound(false);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
     // Start independent requests together, rather than waiting for the summary
     // to mount the analysis component. Service caches deduplicate both callers.
     void predictionService.getById(id).then(result => {
@@ -77,7 +100,10 @@ export function HistoryDetail() {
       const summaryData = await dashboardService.getPredictionSummary(id);
       if (loadVersion.current === version) setSummary(summaryData);
     } catch (err) {
-      if (loadVersion.current === version && !cached) setError(extractApiErrorMessage(err, "No se pudo cargar la predicción."));
+      if (loadVersion.current === version) {
+        if ((err as { status?: number }).status === 404) setNotFound(true);
+        else if (!cached) setError("No se pudo cargar la predicción. Vuelve a intentarlo.");
+      }
     } finally {
       if (loadVersion.current === version) setLoading(false);
     }
@@ -87,20 +113,33 @@ export function HistoryDetail() {
 
 
 
-  // ── Load purchase plan ID when purchase or evaluation tab opens ──
+  // Load the plan and its saved evaluation together for the current prediction.
   useEffect(() => {
-    if ((activeTab !== "purchase" && activeTab !== "evaluation") || !id || planIdLoadStarted.current) return;
-    planIdLoadStarted.current = true;
+    if (activeTab !== "evaluation" || !id) return;
+    let active = true;
     setPurchasePlanIdLoading(true);
-    purchasePlanService.getByExecution(id)
-      .then((p) => {
-        setPurchasePlanId(p.id);
-        // keep up to 5 sample product names so we can show them in diagnostics
-        const samples = (p.items ?? []).slice(0, 5).map((i: { productName: string }) => i.productName);
-        setPlanSampleNames(samples);
-      })
-      .catch(() => {})
-      .finally(() => setPurchasePlanIdLoading(false));
+    setPurchasePlanId(null);
+    setPlanEvalResult(null);
+    setPlanEvalError("");
+    setEvalSectionOpen(false);
+    async function loadEvaluation() {
+      try {
+        const plan = await purchasePlanService.getByExecution(id!);
+        if (!active) return;
+        setPurchasePlanId(plan.id);
+        setPlanSampleNames((plan.items ?? []).slice(0, 5).map(item => item.productName));
+        const result = await purchasePlanService.getLatestEvaluation(plan.id);
+        if (active) setPlanEvalResult(result);
+      } catch (error) {
+        if (active && (error as { status?: number }).status !== 404) {
+          setPlanEvalError("No se pudo recuperar el plan o su evaluación guardada. Vuelve a abrir esta pestaña para reintentar.");
+        }
+      } finally {
+        if (active) setPurchasePlanIdLoading(false);
+      }
+    }
+    void loadEvaluation();
+    return () => { active = false; };
   }, [activeTab, id]);
 
   const formatDate = (dateStr: string) =>
@@ -110,28 +149,7 @@ export function HistoryDetail() {
   if (loading) return <WorkspaceLoading label="Cargando predicción…" />;
 
   // ── Error / no data state ──
-  if (error || !summary?.latestPredictionId) return <WorkspaceError title={error ? "Error al cargar la predicción" : "Predicción no encontrada"} message={error || "El análisis solicitado no está disponible."} onRetry={error ? loadData : undefined} onBack={() => navigate("/historial")} />;
-
-  const parseCsvHeaders = (file: File): Promise<string[]> =>
-    new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = (e.target?.result as string) ?? "";
-        const firstLine = text.split(/\r?\n/)[0] ?? "";
-        const clean = firstLine.startsWith("﻿") ? firstLine.slice(1) : firstLine;
-        const delim = clean.includes(";") ? ";" : ",";
-        resolve(clean.split(delim).map((h) => h.trim().replace(/^"|"$/g, "")));
-      };
-      reader.readAsText(file, "utf-8");
-    });
-
-  const parseFileHeaders = async (file: File): Promise<string[]> => {
-    const ext = file.name.toLowerCase();
-    if (ext.endsWith(".xlsx") || ext.endsWith(".xls")) {
-      return datasetService.parseHeaders(file);
-    }
-    return parseCsvHeaders(file);
-  };
+  if (notFound || error || !summary?.latestPredictionId) return <WorkspaceError title={error ? "Error al cargar la predicción" : "Predicción no encontrada"} message={error || "La predicción solicitada no existe o no está disponible."} onRetry={error ? loadData : undefined} onBack={() => navigate(historyPath)} />;
 
   // Fuzzy match: find first header that contains any of the keywords (case-insensitive)
   const fuzzyMatch = (headers: string[], ...keywords: string[]) =>
@@ -160,7 +178,10 @@ export function HistoryDetail() {
     });
 
   const handleSalesFile = async (file: File) => {
-    setEvalSalesFile(file);
+    const version = ++salesFileVersion.current;
+    setEvalSalesFile(null);
+    setSalesFileError("");
+    setEvalSalesDateCol("");
     setSalesColumns([]);
     setEvalSalesProdCol("");
     setEvalSalesQtyCol("");
@@ -168,34 +189,45 @@ export function HistoryDetail() {
     setCsvSampleNames([]);
     setSalesColsLoading(true);
     try {
-      const headers = await parseFileHeaders(file);
+      const { headers } = await validateLocalDataset(file);
+      if (version !== salesFileVersion.current) return;
+      setEvalSalesFile(file);
       setSalesColumns(headers);
+      setEvalSalesDateCol(fuzzyMatch(headers, "fecha", "date"));
       const detectedProdCol = fuzzyMatch(headers, "producto", "nombre", "product", "item", "descripcion", "medicamento", "articulo");
       setEvalSalesProdCol(detectedProdCol);
       setEvalSalesQtyCol(fuzzyMatch(headers, "cantidad", "qty", "quantity", "ventas", "unidades", "cant", "total"));
-      setEvalSalesPriceCol(fuzzyMatch(headers, "precio", "price", "valor", "costo", "monto", "unitario"));
+      setEvalSalesPriceCol("");
       if (detectedProdCol) {
         const sample = await parseCsvColumnSample(file, detectedProdCol);
-        setCsvSampleNames(sample);
+        if (version === salesFileVersion.current) setCsvSampleNames(sample);
       }
+    } catch (err) {
+      if (version === salesFileVersion.current) setSalesFileError(err instanceof Error ? err.message : "No se pudo leer el archivo.");
     } finally {
-      setSalesColsLoading(false);
+      if (version === salesFileVersion.current) setSalesColsLoading(false);
     }
   };
 
   const handlePharmFile = async (file: File) => {
-    setEvalPharmFile(file);
+    const version = ++pharmacyFileVersion.current;
+    setEvalPharmFile(null);
+    setPharmacyFileError("");
     setPharmColumns([]);
     setEvalPharmProdCol("");
     setEvalPharmQtyCol("");
     setPharmColsLoading(true);
     try {
-      const headers = await parseFileHeaders(file);
+      const { headers } = await validateLocalDataset(file);
+      if (version !== pharmacyFileVersion.current) return;
+      setEvalPharmFile(file);
       setPharmColumns(headers);
       setEvalPharmProdCol(fuzzyMatch(headers, "producto", "nombre", "product", "item", "descripcion", "medicamento", "articulo"));
       setEvalPharmQtyCol(fuzzyMatch(headers, "comprad", "cantidad", "qty", "quantity", "unidades", "cant", "total", "ventas"));
+    } catch (err) {
+      if (version === pharmacyFileVersion.current) setPharmacyFileError(err instanceof Error ? err.message : "No se pudo leer el archivo.");
     } finally {
-      setPharmColsLoading(false);
+      if (version === pharmacyFileVersion.current) setPharmColsLoading(false);
     }
   };
 
@@ -208,7 +240,7 @@ export function HistoryDetail() {
   return (
     <div className="history-detail-page workspace-page">
 
-      <button className="module-back" onClick={() => navigate("/historial")}><ArrowLeft size={14}/>Volver al historial</button>
+      <button className="module-back" onClick={() => navigate(historyPath)}><ArrowLeft size={14}/>Volver al historial</button>
       {/* Header */}
       <div className="module-heading detail-heading">
         <div className="flex items-start gap-4">
@@ -236,11 +268,11 @@ export function HistoryDetail() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("csv", summary.latestPredictionId, summary.forecastPeriod ?? 30)} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+          <button onClick={() => id && exportSavedPurchase("csv", id)} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
             style={{ fontSize: "0.8125rem" }}>
 <Download className="h-4 w-4" />Exportar CSV
           </button>
-          <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("pdf", summary.latestPredictionId, summary.forecastPeriod ?? 30)} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
+          <button onClick={() => id && exportSavedPurchase("pdf", id)} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
             style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
 <Download className="h-4 w-4" />Exportar PDF
           </button>
@@ -257,7 +289,14 @@ export function HistoryDetail() {
       {activeTab === "evaluation" && (
         <div className="space-y-5">
 
-          {/* Upload form card */}
+          {planEvalResult && (
+            <button className="module-secondary" aria-expanded={evalSectionOpen} onClick={() => setEvalSectionOpen(open => !open)}>
+              {evalSectionOpen ? "Ocultar formulario" : "Realizar otra evaluación"}
+            </button>
+          )}
+          {purchasePlanIdLoading && <WorkspaceLoading label="Buscando la evaluación guardada…" />}
+          {!purchasePlanIdLoading && (!planEvalResult || evalSectionOpen) && (
+          /* Upload form card */
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
             className="module-card rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
@@ -345,6 +384,7 @@ export function HistoryDetail() {
                         {[
                           { label: "Columna producto", value: evalSalesProdCol, set: setEvalSalesProdCol, required: true, placeholder: "— selecciona —" },
                           { label: "Columna cantidad", value: evalSalesQtyCol, set: setEvalSalesQtyCol, required: true, placeholder: "— selecciona —" },
+                          { label: "Columna fecha", value: evalSalesDateCol, set: setEvalSalesDateCol, required: true, placeholder: "— selecciona —" },
                           { label: "Columna precio", value: evalSalesPriceCol, set: setEvalSalesPriceCol, required: false, placeholder: "— sin precio —" },
                         ].map(({ label, value, set, required, placeholder }) => (
                           <div key={label}>
@@ -463,6 +503,9 @@ export function HistoryDetail() {
                 </div>
               )}
 
+              {salesFileError && <p role="alert" className="text-red-600">Ventas: {salesFileError}</p>}
+              {pharmacyFileError && <p role="alert" className="text-red-600">Plan de la botica: {pharmacyFileError} <button type="button" className="underline" onClick={() => setPharmacyFileError("")}>Continuar sin este archivo</button></p>}
+
               {/* Error & action */}
               {planEvalError && (
                 <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
@@ -476,28 +519,39 @@ export function HistoryDetail() {
                   {purchasePlanIdLoading ? "Verificando plan de compras…" :
                    !purchasePlanId ? "Genera el plan de compras primero" :
                    !evalSalesFile ? "Sube las ventas reales para continuar" :
-                   !evalSalesProdCol || !evalSalesQtyCol ? "Selecciona las columnas requeridas" :
+                   !evalSalesProdCol || !evalSalesQtyCol || !evalSalesDateCol ? "Selecciona las columnas requeridas" :
                    "Listo para evaluar"}
                 </p>
                 <button
-                  disabled={!evalSalesFile || !evalSalesProdCol || !evalSalesQtyCol || planEvalLoading || !purchasePlanId || purchasePlanIdLoading}
+                  disabled={!evalSalesFile || !evalSalesProdCol || !evalSalesQtyCol || !evalSalesDateCol || salesColsLoading || pharmColsLoading || !!pharmacyFileError || (evalPharmFile != null && (!evalPharmProdCol || !evalPharmQtyCol)) || planEvalLoading || !purchasePlanId || purchasePlanIdLoading}
                   onClick={async () => {
                     if (!purchasePlanId || !evalSalesFile) return;
                     setPlanEvalLoading(true);
                     setPlanEvalError("");
-                    setPlanEvalResult(null);
                     try {
-                      const result = await purchasePlanService.evaluate(
+                      const evaluate = (confirmed: boolean) => purchasePlanService.evaluate(
                         purchasePlanId,
                         evalSalesFile,
                         evalSalesProdCol,
                         evalSalesQtyCol,
+                        evalSalesDateCol,
+                        confirmed,
                         evalSalesPriceCol || undefined,
                         evalPharmFile ?? undefined,
                         evalPharmProdCol || undefined,
                         evalPharmQtyCol || undefined,
                       );
+                      let result: PlanEvaluationResponse;
+                      try {
+                        result = await evaluate(false);
+                      } catch (error) {
+                        const warning = (error as { errors?: Record<string, string[]> } | null)?.errors?.salesOutsideForecastPeriod?.[0];
+                        if (!warning) throw error;
+                        if (!window.confirm(warning)) return;
+                        result = await evaluate(true);
+                      }
                       setPlanEvalResult(result);
+                      setEvalSectionOpen(false);
                       setTimeout(() => evalResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
                     } catch (err) {
                       setPlanEvalError(extractApiErrorMessage(err, "Error al evaluar el plan."));
@@ -515,6 +569,7 @@ export function HistoryDetail() {
               </div>
             </div>
           </motion.div>
+          )}
 
           {/* Results */}
           {planEvalResult && (
@@ -523,6 +578,15 @@ export function HistoryDetail() {
               {/* KPI cards */}
               <div className="px-6 py-5 border-b border-gray-100">
                 <p className="text-gray-900 mb-4" style={{ fontWeight: 700, fontSize: "1rem" }}>Resultado</p>
+                <p className="mb-2 text-sm text-gray-600">
+                  Brecha total PharmaCast: {formatGap(planEvalResult.pharmaCastTotalAbsoluteGap)}
+                  {planEvalResult.summary.hasPharmacyPlan && (
+                    <> · Brecha total Botica: {formatGap(planEvalResult.pharmacyTotalAbsoluteGap)} · {formatReduction(planEvalResult.totalGapReductionUnits)}</>
+                  )}
+                </p>
+                <p className="mb-4 text-xs text-gray-500">
+                  La brecha es la distancia entre la cantidad del plan y las ventas reales. La comparación orienta tu decisión de compra.
+                </p>
                 <div className={`grid gap-4 ${planEvalResult.summary.hasPharmacyPlan ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
                   <div className="rounded-xl bg-blue-50 border border-blue-100 p-4">
                     <p className="text-blue-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Efectividad PharmaCast</p>
@@ -530,7 +594,7 @@ export function HistoryDetail() {
                       {planEvalResult.summary.pharmaCastGoodPct}%
                     </p>
                     <p className="text-blue-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                      {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmaCastWape}%
+                      {planEvalResult.summary.pharmaCastGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmaCastWape == null ? "No disponible" : `${planEvalResult.summary.pharmaCastWape}%`}
                     </p>
                   </div>
                   {planEvalResult.summary.hasPharmacyPlan && (
@@ -540,7 +604,7 @@ export function HistoryDetail() {
                         {planEvalResult.summary.pharmacyGoodPct}%
                       </p>
                       <p className="text-orange-500 mt-0.5" style={{ fontSize: "0.75rem" }}>
-                        {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · MAPE {planEvalResult.summary.pharmacyWape ?? "—"}%
+                        {planEvalResult.summary.pharmacyGoodCount}/{planEvalResult.summary.totalProducts} productos · WAPE {planEvalResult.summary.pharmacyWape == null ? "No disponible" : `${planEvalResult.summary.pharmacyWape}%`}
                       </p>
                     </div>
                   )}
@@ -580,6 +644,9 @@ export function HistoryDetail() {
                       {planEvalResult.summary.hasPharmacyPlan && (
                         <th className="px-4 py-3 text-right text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Botica</th>
                       )}
+                      <th className="px-4 py-3 text-right text-gray-400">Diferencia PharmaCast (uds)</th>
+                      {planEvalResult.summary.hasPharmacyPlan && <th className="px-4 py-3 text-right text-gray-400">Diferencia Botica (uds)</th>}
+                      {planEvalResult.summary.hasPharmacyPlan && <th className="px-4 py-3 text-right text-gray-400">Cambio de brecha</th>}
                       {planEvalResult.summary.hasPrice && (
                         <th className="px-4 py-3 text-right text-gray-400" style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Sobrestock S/.</th>
                       )}
@@ -637,22 +704,25 @@ export function HistoryDetail() {
                             <span title={item.productName}>{item.productName.length > 36 ? item.productName.slice(0, 36) + "…" : item.productName}</span>
                           </td>
                           <td className="px-4 py-3 text-right text-gray-500" style={{ fontSize: "0.8125rem" }}>
-                            {Math.round(item.actualSold)}
+                            {formatQuantity(item.actualSold)}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className={`inline-block rounded-md px-2 py-0.5 ${cls[item.pharmaCastAccuracy]}`} style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
-                              {Math.round(item.pharmaCastPlan)}
+                              {formatQuantity(item.pharmaCastPlan)}
                             </span>
                           </td>
                           {planEvalResult.summary.hasPharmacyPlan && (
                             <td className="px-4 py-3 text-right">
                               {item.pharmacyPlan != null && item.pharmacyAccuracy ? (
                                 <span className={`inline-block rounded-md px-2 py-0.5 ${cls[item.pharmacyAccuracy]}`} style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
-                                  {Math.round(item.pharmacyPlan)}
+                                  {formatQuantity(item.pharmacyPlan)}
                                 </span>
                               ) : <span className="text-gray-300" style={{ fontSize: "0.8125rem" }}>—</span>}
                             </td>
                           )}
+                          <td className="px-4 py-3 text-right">{formatDifference(item.pharmaCastDifference)}</td>
+                          {planEvalResult.summary.hasPharmacyPlan && <td className="px-4 py-3 text-right">{formatDifference(item.pharmacyDifference)}</td>}
+                          {planEvalResult.summary.hasPharmacyPlan && <td className="px-4 py-3 text-right text-sm">{formatReduction(item.gapReductionUnits)}</td>}
                           {planEvalResult.summary.hasPrice && (
                             <td className="px-4 py-3 text-right" style={{ fontSize: "0.8125rem" }}>
                               {item.sobrestockSoles > 0
@@ -673,16 +743,20 @@ export function HistoryDetail() {
               <div className="px-6 py-5 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                   <p className="text-gray-700" style={{ fontWeight: 600, fontSize: "0.9375rem" }}>Comparativa visual</p>
+                  <div className="flex gap-2">
+                    <button className="module-secondary" type="button" aria-pressed={chartMode === "quantities"} onClick={() => setChartMode("quantities")}>Cantidades</button>
+                    <button className="module-secondary" type="button" aria-pressed={chartMode === "gaps"} onClick={() => setChartMode("gaps")}>Brechas</button>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-gray-400 mr-1" style={{ fontSize: "0.75rem" }}>Mostrar:</span>
-                    {([10, 20, planEvalResult.items.length] as const).map((n) => {
+                    {[10, 20].filter(n => n < planEvalResult.items.length).concat(planEvalResult.items.length).map((n) => {
                       const label = n === planEvalResult.items.length ? "Todos" : `Top ${n}`;
                       return (
                         <button
                           key={n}
                           onClick={() => setChartLimit(n)}
                           className={`rounded-lg border px-3 py-1 transition-all ${
-                            chartLimit === n
+                            Math.min(chartLimit, planEvalResult.items.length) === n
                               ? "border-blue-500/50 bg-blue-500/10 text-blue-600"
                               : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
                           }`}
@@ -701,9 +775,11 @@ export function HistoryDetail() {
                       .map((item) => ({
                         name: item.productName.slice(0, 16),
                         fullName: item.productName,
-                        actual: Math.round(item.actualSold),
-                        pharmaCast: Math.round(item.pharmaCastPlan),
-                        ...(planEvalResult.summary.hasPharmacyPlan ? { botica: item.pharmacyPlan != null ? Math.round(item.pharmacyPlan) : null } : {}),
+                        actual: item.actualSold,
+                        pharmaCast: item.pharmaCastPlan,
+                        pharmaCastGap: item.pharmaCastAbsoluteGap,
+                        pharmacyGap: item.pharmacyAbsoluteGap,
+                        ...(planEvalResult.summary.hasPharmacyPlan ? { botica: item.pharmacyPlan } : {}),
                       }))}
                     margin={{ top: 8, right: 16, left: 0, bottom: 60 }}
                   >
@@ -723,7 +799,7 @@ export function HistoryDetail() {
                                   <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.stroke }} />
                                   <span className="text-gray-500" style={{ fontSize: "0.75rem" }}>{p.name}</span>
                                 </div>
-                                <span style={{ color: p.stroke, fontSize: "0.875rem", fontWeight: 700 }}>{p.value} uds</span>
+                                <span style={{ color: p.stroke, fontSize: "0.875rem", fontWeight: 700 }}>{formatQuantity(p.value)} uds</span>
                               </div>
                             ))}
                           </div>
@@ -731,15 +807,15 @@ export function HistoryDetail() {
                       }}
                     />
                     <Legend wrapperStyle={{ paddingTop: 8 }} formatter={(v) => <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{v}</span>} />
-                    <Line type="monotone" dataKey="actual" name="Vendido real" stroke="#007AFF" strokeWidth={2.5} dot={false} />
-                    <Line type="monotone" dataKey="pharmaCast" name="Plan PharmaCast" stroke="#007AFF" strokeWidth={2.5} dot={false} />
+                    {chartMode === "quantities" && <Line type="linear" dataKey="actual" name="Vendido real" stroke="#007AFF" strokeWidth={2.5} dot={{ r: 2 }} />}
+                    <Line type="linear" dataKey={chartMode === "gaps" ? "pharmaCastGap" : "pharmaCast"} name={chartMode === "gaps" ? "Brecha PharmaCast" : "Plan PharmaCast"} stroke="#0891b2" strokeWidth={2.5} strokeDasharray="8 4" dot={{ r: 2 }} />
                     {planEvalResult.summary.hasPharmacyPlan && (
-                      <Line type="monotone" dataKey="botica" name="Plan Botica" stroke="#f97316" strokeWidth={2} strokeDasharray="5 3" dot={false} />
+                      <Line type="linear" dataKey={chartMode === "gaps" ? "pharmacyGap" : "botica"} name={chartMode === "gaps" ? "Brecha Botica" : "Plan Botica"} stroke="#f97316" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 2 }} />
                     )}
                   </LineChart>
                 </ResponsiveContainer>
                 <p className="text-gray-400 text-center mt-2" style={{ fontSize: "0.7rem" }}>
-                  Ordenado por cantidad prevista — Top {Math.min(chartLimit, planEvalResult.items.length)} de {planEvalResult.items.length} productos
+                  Totales del período por producto · Ordenados por mayor diferencia absoluta entre el plan PharmaCast y las ventas · {Math.min(chartLimit, planEvalResult.items.length)} de {planEvalResult.items.length} productos
                 </p>
               </div>
             </div>

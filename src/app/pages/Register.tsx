@@ -1,8 +1,8 @@
 import { AuthFieldError } from "../components/AuthFieldError";
 import { PasswordRequirements } from "../components/PasswordRequirements";
 import { AuthShell } from "../components/AuthShell";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router";
 import {
   Activity,
   Eye,
@@ -19,20 +19,25 @@ import {
 import { motion } from "motion/react";
 import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
 
+let termsDraft: { name: string; pharmacy: string; email: string } | undefined;
+
 export function Register() {
   const navigate = useNavigate();
-  const { register } = useAuth();
-  const [form, setForm] = useState({
+  const { register, isLoggedIn } = useAuth();
+  const [form, setForm] = useState(() => ({
     name: "",
     pharmacy: "",
     email: "",
     password: "",
     confirmPassword: "",
-  });
+    ...termsDraft,
+  }));
+  useEffect(() => { termsDraft = undefined; }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
   const [error, setError] = useState("");
+  const [duplicateEmail, setDuplicateEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
@@ -40,6 +45,7 @@ export function Register() {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
     setFieldErrors((prev) => ({ ...prev, [key]: undefined, ...(key === "password" ? { confirmPassword: undefined } : {}) }));
     setError("");
+    setDuplicateEmail(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,7 +68,9 @@ export function Register() {
       await register(form.name.trim(), form.email.trim(), form.password, form.pharmacy || "Mi Farmacia");
       navigate("/panel");
     } catch (err) {
-      setError(extractApiErrorMessage(err, "No se pudo crear la cuenta. Intenta de nuevo."));
+      const duplicate = (err as { status?: number } | null)?.status === 409;
+      setDuplicateEmail(duplicate);
+      setError(duplicate ? "Ya existe una cuenta con ese correo." : extractApiErrorMessage(err, "No se pudo crear la cuenta. Intenta de nuevo."));
     } finally {
       setLoading(false);
     }
@@ -70,7 +78,11 @@ export function Register() {
 
 
 
-  return <AuthShell mode="register"><div className="auth-form">
+  const saveTermsDraft = () => {
+    termsDraft = { name: form.name, pharmacy: form.pharmacy, email: form.email };
+  };
+  if (isLoggedIn) return <Navigate to="/panel" replace />;
+  return <AuthShell mode="register" onOpenTerms={saveTermsDraft}><div className="auth-form">
           <div className="mb-7">
             <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.875rem", fontWeight: 700 }}>
               Crea tu cuenta
@@ -211,17 +223,18 @@ export function Register() {
 
             <p className="text-gray-400 pt-1" style={{ fontSize: "0.8125rem", lineHeight: 1.6 }}>
               Al registrarte aceptas nuestros{" "}
-              <Link to="/terminos?from=register" className="text-blue-500 hover:text-blue-600 transition-colors">
+              <Link onClick={saveTermsDraft} to="/terminos?from=register" className="text-blue-500 hover:text-blue-600 transition-colors">
                 Términos de uso
               </Link>{" "}
               y{" "}
-              <Link to="/terminos?from=register" className="text-blue-500 hover:text-blue-600 transition-colors">
+              <Link onClick={saveTermsDraft} to="/terminos?from=register" className="text-blue-500 hover:text-blue-600 transition-colors">
                 Política de privacidad
               </Link>
               .
             </p>
 
             <AuthFieldError message={error} />
+            {duplicateEmail && <p className="text-sm"><Link className="text-blue-600 underline" to="/acceso">Iniciar sesión</Link>{" · "}<Link className="text-blue-600 underline" to="/acceso/recuperar">Recuperar contraseña</Link></p>}
 
             <button
               type="submit"

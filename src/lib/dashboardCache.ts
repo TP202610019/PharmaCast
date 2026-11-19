@@ -10,24 +10,24 @@ export function peekCache<T>(key: string): T | undefined {
   return (store.get(key) as CacheEntry<T> | undefined)?.data;
 }
 
-export function withCache<T>(key: string, fetcher: () => Promise<T>, staleMs = DEFAULT_STALE_MS): Promise<T> {
+export function withCache<T>(key: string, fetcher: () => Promise<T>, staleMs = DEFAULT_STALE_MS, resultKey = key): Promise<T> {
   const hit = store.get(key) as CacheEntry<T> | undefined;
   if (hit && Date.now() - hit.ts < staleMs) return Promise.resolve(hit.data);
   const running = pending.get(key);
   if (running) return running as Promise<T>;
   const started = generation;
-  const revision = revisions.get(key) ?? 0;
+  const revision = revisions.get(resultKey) ?? 0;
   let restored = false;
   const request = (async () => {
-    const saved = await readPersistedAnalysis<T>(key);
-    if (generation === started && (revisions.get(key) ?? 0) === revision && saved && Date.now() - saved.ts < staleMs) {
-      store.set(key, saved);
+    const saved = await readPersistedAnalysis<T>(resultKey);
+    if (generation === started && (revisions.get(resultKey) ?? 0) === revision && saved && Date.now() - saved.ts < staleMs) {
+      store.set(resultKey, saved);
       restored = true;
       return saved.data;
     }
     return fetcher();
   })().then(data => {
-    if (!restored && generation === started && (revisions.get(key) ?? 0) === revision) seedCache(key, data);
+    if (!restored && generation === started && (revisions.get(resultKey) ?? 0) === revision) seedCache(resultKey, data);
     return data;
   }).finally(() => { if (pending.get(key) === request) pending.delete(key); });
   pending.set(key, request);

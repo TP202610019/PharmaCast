@@ -43,6 +43,12 @@ export const datasetService = {
     return data.data ?? [];
   },
 
+  async validateInventory(id: string, productColumn: string, stockColumn: string, purchaseCostColumn?: string): Promise<void> {
+    await http.post(`/api/datasets/${id}/validate-inventory`, null, {
+      params: { productColumn, stockColumn, purchaseCostColumn: purchaseCostColumn || undefined },
+    });
+  },
+
   async parseHeaders(file: File): Promise<string[]> {
     const form = new FormData();
     form.append("file", file);
