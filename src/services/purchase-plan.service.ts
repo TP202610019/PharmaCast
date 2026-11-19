@@ -50,6 +50,8 @@ export const purchasePlanService = {
     actualSalesFile: File,
     productCol: string,
     quantityCol: string,
+    salesDateColumn: string,
+    confirmOutsidePeriod: boolean,
     priceCol?: string,
     pharmacyPlanFile?: File,
     pharmacyProductCol?: string,
@@ -59,6 +61,8 @@ export const purchasePlanService = {
     form.append('actualSalesFile', actualSalesFile);
     form.append('productCol', productCol);
     form.append('quantityCol', quantityCol);
+    form.append('salesDateColumn', salesDateColumn);
+    form.append('confirmOutsidePeriod', String(confirmOutsidePeriod));
     if (priceCol) form.append('priceCol', priceCol);
     if (pharmacyPlanFile) form.append('pharmacyPlanFile', pharmacyPlanFile);
     if (pharmacyProductCol) form.append('pharmacyProductCol', pharmacyProductCol);

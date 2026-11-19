@@ -304,6 +304,11 @@ export interface PlanEvaluationItem {
   actualSold: number;
   pharmaCastPlan: number;
   pharmacyPlan: number | null;
+  pharmaCastDifference: number;
+  pharmacyDifference: number | null;
+  pharmaCastAbsoluteGap: number;
+  pharmacyAbsoluteGap: number | null;
+  gapReductionUnits: number | null;
   pharmaCastAccuracy: 'good' | 'ok' | 'poor';
   pharmacyAccuracy: 'good' | 'ok' | 'poor' | null;
   wape: number | null;
@@ -332,6 +337,9 @@ export interface PlanEvaluationSummary {
 
 export interface PlanEvaluationResponse {
   planId: string;
+  pharmaCastTotalAbsoluteGap: number;
+  pharmacyTotalAbsoluteGap: number | null;
+  totalGapReductionUnits: number | null;
   summary: PlanEvaluationSummary;
   items: PlanEvaluationItem[];
 }
