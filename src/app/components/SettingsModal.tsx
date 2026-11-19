@@ -7,7 +7,8 @@ import {
   Save,
   Pencil,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import http from "../../lib/http";
+import { extractApiErrorMessage, useAuth } from "../context/AuthContext";
 
 interface Props { open: boolean; onClose: () => void; }
 
@@ -27,6 +28,7 @@ export function SettingsModal({ open, onClose }: Props) {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [passError, setPassError] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const openEdit = (field: EditField) => {
     setPassError("");
@@ -39,7 +41,8 @@ export function SettingsModal({ open, onClose }: Props) {
 
   const closeEdit = () => setEditField(null);
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
+    if (savingPassword || saved) return;
     if (editField === "name") {
       if (!editNameVal.trim()) return;
       updateUser({ name: editNameVal.trim() });
@@ -49,14 +52,26 @@ export function SettingsModal({ open, onClose }: Props) {
     } else if (editField === "password") {
       setPassError("");
       if (!passVals.current) { setPassError("Ingresa tu contraseña actual."); return; }
+      if (passVals.newPass.length < 8) { setPassError("La nueva contraseña debe tener al menos 8 caracteres."); return; }
       if (!passwordRequirements.every((rule) => rule.test(passVals.newPass))) { setPassError("Completa los requisitos de la contraseña."); return; }
       if (passVals.newPass !== passVals.confirm) { setPassError("Las contraseñas no coinciden."); return; }
+      setSavingPassword(true);
+      try {
+        await http.post("/api/auth/change-password", { currentPassword: passVals.current, newPassword: passVals.newPass });
+        setPassVals({ current: "", newPass: "", confirm: "" });
+      } catch (err) {
+        setPassError(extractApiErrorMessage(err, "No se pudo cambiar la contraseña."));
+        return;
+      } finally {
+        setSavingPassword(false);
+      }
     }
     setSaved(true);
     setTimeout(() => { setSaved(false); closeEdit(); }, 1200);
   };
 
   const handleClose = () => {
+    if (savingPassword) return;
     setEditField(null);
     setPassError("");
     onClose();
