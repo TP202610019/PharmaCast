@@ -20,7 +20,7 @@ export const purchasePlanService = {
       inventoryDatasetId,
       inventoryFieldMappings,
     };
-    return withCache(`plan:${predictionExecutionId}`, async () => {
+    return withCache(`generate-plan:${predictionExecutionId}`, async () => {
       try {
         const { data } = await http.post<ApiResponse<PurchasePlanResponse>>("/api/purchase-plans", body);
         invalidateAnalysisLists();
@@ -30,7 +30,7 @@ export const purchasePlanService = {
         const { data } = await http.get<ApiResponse<PurchasePlanResponse>>(`/api/purchase-plans/by-execution/${predictionExecutionId}`);
         return data.data!;
       }
-    }, 10 * 60_000);
+    }, 0, `plan:${predictionExecutionId}`);
   },
 
   async getById(id: string): Promise<PurchasePlanResponse> {
@@ -50,6 +50,8 @@ export const purchasePlanService = {
     actualSalesFile: File,
     productCol: string,
     quantityCol: string,
+    salesDateColumn: string,
+    confirmOutsidePeriod: boolean,
     priceCol?: string,
     pharmacyPlanFile?: File,
     pharmacyProductCol?: string,
@@ -59,6 +61,8 @@ export const purchasePlanService = {
     form.append('actualSalesFile', actualSalesFile);
     form.append('productCol', productCol);
     form.append('quantityCol', quantityCol);
+    form.append('salesDateColumn', salesDateColumn);
+    form.append('confirmOutsidePeriod', String(confirmOutsidePeriod));
     if (priceCol) form.append('priceCol', priceCol);
     if (pharmacyPlanFile) form.append('pharmacyPlanFile', pharmacyPlanFile);
     if (pharmacyProductCol) form.append('pharmacyProductCol', pharmacyProductCol);
@@ -76,8 +80,9 @@ export const purchasePlanService = {
         `/api/purchase-plans/${planId}/evaluation/latest`
       );
       return data.data ?? null;
-    } catch {
-      return null; // 404 = no evaluation saved yet
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null;
+      throw error;
     }
   },
 };

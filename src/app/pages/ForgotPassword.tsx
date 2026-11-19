@@ -15,6 +15,7 @@ export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [accountMissing, setAccountMissing] = useState(false);
 
   // Code state
   const [code, setCode] = useState(["", "", "", "", "", ""]);
@@ -61,6 +62,7 @@ export function ForgotPassword() {
       startCooldown();
       setTimeout(() => inputRefs.current[0]?.focus(), 300);
     } catch (err) {
+      setAccountMissing((err as { status?: number } | null)?.status === 404);
       setError((err as { status?: number } | null)?.status === 502
         ? "No pudimos enviar el código."
         : (err as { status?: number } | null)?.status === 404
@@ -166,6 +168,7 @@ export function ForgotPassword() {
                         style={{ fontSize: "0.9375rem" }} />
                     </div>
                     <AuthFieldError message={error} />
+                    {error && accountMissing && <Link to="/registro" className="text-sm text-blue-600 underline">Crear una cuenta</Link>}
                   </div>
                   <button type="submit" disabled={loading}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"

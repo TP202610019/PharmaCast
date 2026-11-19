@@ -1,7 +1,7 @@
 import { AuthFieldError } from "../components/AuthFieldError";
 import { AuthShell } from "../components/AuthShell";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import {
   Activity, Eye, EyeOff, ArrowRight, Lock, Mail, CheckCircle2, Clock, ShoppingCart,
 } from "lucide-react";
@@ -10,7 +10,11 @@ import { useAuth, extractApiErrorMessage } from "../context/AuthContext";
 
 export function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isLoggedIn } = useAuth();
+  const requestedPath = useLocation().state?.returnTo;
+  const destination = typeof requestedPath === "string"
+    && /^\/(panel|historial|predicciones\/nueva)(?:[/?#]|$)/.test(requestedPath)
+    && !requestedPath.includes("\\") ? requestedPath : "/panel";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +33,7 @@ export function Login() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      navigate("/panel");
+      navigate(destination, { replace: true });
     } catch (err) {
       setError((err as { status?: number } | null)?.status === 401
         ? "Correo o contraseña incorrectos."
@@ -39,6 +43,7 @@ export function Login() {
     }
   };
 
+  if (isLoggedIn) return <Navigate to={destination} replace />;
   return <AuthShell mode="login"><div className="auth-form">
           <div className="mb-8">
             <h1 className="text-gray-900 mb-2" style={{ fontSize: "1.875rem", fontWeight: 700 }}>

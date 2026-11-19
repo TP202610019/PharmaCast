@@ -69,7 +69,9 @@
 .shared-chart-legend{display:flex;align-items:center;gap:21px;flex-wrap:wrap;margin:17px 0 8px;color:#85858f;font-size:12px}
 .shared-chart-legend>span{display:inline-flex;align-items:center;gap:8px}
 .shared-chart-legend i{display:inline-block;width:26px;height:0;border-top:2px solid #007aff}
-.shared-chart-legend i.dashed{border-top-style:dashed}
+.shared-chart-legend i.dashed{border-top-style:dashed;border-top-color:#0891b2}
+.analysis-table-section .analysis-trend[data-trend="up"] svg{color:#b45309}
+.analysis-table-section .analysis-trend[data-trend="down"] svg{color:#2563eb}
 .shared-chart-legend i.band{height:11px;border:1px solid #a8d0ff;border-radius:3px;background:#e3f0ff}
 .shared-chart-legend i.boundary{width:0;height:13px;border:0;border-left:1.5px dashed #85858f}
 .shared-chart-period{margin-left:auto}

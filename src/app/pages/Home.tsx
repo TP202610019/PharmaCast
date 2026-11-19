@@ -40,6 +40,8 @@ export function Home() {
     };
   }, []);
   const homeRef = useRef<HTMLDivElement>(null);
+  const accessDialog = useRef<HTMLDialogElement>(null);
+  const openAccessDialog = () => accessDialog.current?.showModal();
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const observer = new IntersectionObserver(entries => {
@@ -52,13 +54,22 @@ export function Home() {
   useEffect(() => { if (isLoggedIn) navigate("/panel", { replace: true }); }, [isLoggedIn, navigate]);
   return (
     <div className="ph-home" ref={homeRef}>
+      <dialog ref={accessDialog} aria-labelledby="start-access-title" className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-6 text-gray-900 backdrop:bg-black/50">
+        <h2 id="start-access-title" className="text-lg font-semibold">Comienza con PharmaCast</h2>
+        <p className="mt-2 text-sm text-gray-600">Accede a tu cuenta para crear una predicción o regístrate para empezar.</p>
+        <div className="mt-5 flex flex-wrap items-center gap-4 text-sm">
+          <Link className="rounded-lg bg-blue-600 px-4 py-2 text-white" to="/registro">Crear cuenta</Link>
+          <Link className="text-blue-600 underline" to="/acceso">Iniciar sesión</Link>
+          <form method="dialog"><button className="text-gray-600">Cancelar</button></form>
+        </div>
+      </dialog>
       <div className="ph-hero-band"><section id="inicio" className="ph-hero" aria-labelledby="hero-title">
         <div className="ph-copy">
           
           <h1 id="hero-title">Anticipa la demanda de tu farmacia <span>para comprar mejor</span></h1>
           <p>Convierte tu historial de ventas en pronósticos de demanda y un plan de compras para tu farmacia.</p>
           <div className="ph-actions">
-            <Link to="/registro" className="ph-primary">Comenzar <ArrowUpRight size={19} /></Link>
+            <button type="button" onClick={openAccessDialog} className="ph-primary">Comenzar <ArrowUpRight size={19} /></button>
             <a href="#proceso" className="ph-secondary">Conocer el proceso <ArrowRight size={17} /></a>
           </div>
           

@@ -97,7 +97,7 @@ export interface DashboardSummaryResponse {
   latestStatus: ExecutionStatus | null;
   accuracy: number | null;
   totalProducts: number;
-  criticalCount: number;
+  criticalCount: number | null;
   totalForecastedUnits: number;
   productNames: string[];
   salesProductColumn: string | null;
@@ -108,7 +108,7 @@ export interface DashboardProductRow {
   productName: string;
   totalPredictedQuantity: number;
   avgPredictedQuantity: number;
-  priority: "critical" | "high" | "medium" | "low";
+  priority: string | null;
   historicalAvg: number | null;
 }
 
@@ -121,6 +121,7 @@ export interface PagedResult<T> {
 }
 
 export interface DashboardChartPoint {
+  periodEnd?: string | null;
   date: string;
   predicted: number;
   upper: number | null;
@@ -202,6 +203,7 @@ export interface CreatePredictionRequest {
 }
 
 export interface ForecastResultResponse {
+  periodEnd?: string | null;
   productName: string;
   forecastDate: string;
   predictedQuantity: number;
@@ -229,7 +231,9 @@ export interface PredictionMetricResponse {
 }
 
 export interface PredictionResponse {
-  productSummaries?: { productName: string; totalPredicted: number; averageDailyPredicted: number; historicalAvg: number | null; variationPercent: number | null }[];
+  forecastFrequency?: "Daily" | "Weekly";
+  confidenceLevel?: number | null;
+  productSummaries?: { productName: string; category?: string | null; trend?: "up" | "down" | "steady" | null; totalPredicted: number; averageDailyPredicted: number; historicalAvg: number | null; variationPercent: number | null }[];
   productMetrics?: PredictionMetricResponse[];
   baselineMetrics?: PredictionMetricResponse[];
   baselineProductMetrics?: PredictionMetricResponse[];
@@ -246,6 +250,10 @@ export interface PredictionResponse {
 }
 
 export interface PredictionSummaryResponse {
+  criticalCount?: number | null;
+  totalProducts?: number | null;
+  totalUnits?: number | null;
+  accuracy?: number | null;
   id: string;
   datasetId: string;
   datasetName: string;
@@ -264,16 +272,20 @@ export interface GeneratePurchasePlanRequest {
   inventoryFieldMappings?: Record<string, string>;
 }
 
+export type PurchasePriority = "critical" | "high" | "medium" | "low" | "none";
+
 export interface PurchasePlanItemResponse {
   id: string;
   productName: string;
   recommendedQuantity: number;
   demandPredicted: number | null;
   stockActual: number | null;
+  priority?: PurchasePriority | null;
   toPurchase: number | null;
   category: string | null;
   supplier: string | null;
   estimatedCost: number | null;
+  unitPurchaseCost?: number | null;
 }
 
 export interface PurchasePlanResponse {
@@ -282,6 +294,8 @@ export interface PurchasePlanResponse {
   planName: string;
   generatedAt: string;
   items: PurchasePlanItemResponse[];
+  totalEstimatedCost?: number | null;
+  itemsMissingPurchaseCost?: number;
   createdAt: string;
 }
 
@@ -290,9 +304,14 @@ export interface PlanEvaluationItem {
   actualSold: number;
   pharmaCastPlan: number;
   pharmacyPlan: number | null;
+  pharmaCastDifference: number;
+  pharmacyDifference: number | null;
+  pharmaCastAbsoluteGap: number;
+  pharmacyAbsoluteGap: number | null;
+  gapReductionUnits: number | null;
   pharmaCastAccuracy: 'good' | 'ok' | 'poor';
   pharmacyAccuracy: 'good' | 'ok' | 'poor' | null;
-  wape: number;
+  wape: number | null;
   pharmacyWape: number | null;
   sobrestockSoles: number;
   desabastoSoles: number;
@@ -308,7 +327,7 @@ export interface PlanEvaluationSummary {
   hasPrice: boolean;
   pharmaCastGoodPct: number;
   pharmacyGoodPct: number;
-  pharmaCastWape: number;
+  pharmaCastWape: number | null;
   pharmacyWape: number | null;
   pharmaCastTotalSobrestockSoles: number;
   pharmaCastTotalDesabastoSoles: number;
@@ -318,6 +337,9 @@ export interface PlanEvaluationSummary {
 
 export interface PlanEvaluationResponse {
   planId: string;
+  pharmaCastTotalAbsoluteGap: number;
+  pharmacyTotalAbsoluteGap: number | null;
+  totalGapReductionUnits: number | null;
   summary: PlanEvaluationSummary;
   items: PlanEvaluationItem[];
 }

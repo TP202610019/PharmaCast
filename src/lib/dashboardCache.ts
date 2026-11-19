@@ -9,15 +9,15 @@ export function peekCache<T>(key: string): T | undefined {
   return (store.get(key) as CacheEntry<T> | undefined)?.data;
 }
 
-export function withCache<T>(key: string, fetcher: () => Promise<T>, staleMs = DEFAULT_STALE_MS): Promise<T> {
+export function withCache<T>(key: string, fetcher: () => Promise<T>, staleMs = DEFAULT_STALE_MS, resultKey = key): Promise<T> {
   const hit = store.get(key) as CacheEntry<T> | undefined;
   if (hit && Date.now() - hit.ts < staleMs) return Promise.resolve(hit.data);
   const running = pending.get(key);
   if (running) return running as Promise<T>;
   const started = generation;
-  const revision = revisions.get(key) ?? 0;
+  const revision = revisions.get(resultKey) ?? 0;
   const request = fetcher().then(data => {
-    if (generation === started && (revisions.get(key) ?? 0) === revision) seedCache(key, data);
+    if (generation === started && (revisions.get(resultKey) ?? 0) === revision) seedCache(resultKey, data);
     return data;
   }).finally(() => { if (pending.get(key) === request) pending.delete(key); });
   pending.set(key, request);
