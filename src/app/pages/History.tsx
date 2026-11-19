@@ -3,7 +3,7 @@ import type { PredictionSummaryResponse } from "../../types/api";
 import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { matchesHistorySearch } from "../../lib/historyFilters";
 import {
   Calendar,
@@ -52,6 +52,7 @@ const statusConfig = {
 
 export function History() {
   const navigate = useNavigate();
+  const savedPredictionId = useLocation().state?.savedPredictionId as string | undefined;
   const [params, setParams] = useSearchParams();
   const [records, setRecords] = useState<PredictionUIRecord[]>(() => (peekCache<PredictionSummaryResponse[]>("history") ?? []).map(summaryToUIRecord));
   const [loading, setLoading] = useState(() => peekCache("history") === undefined);
@@ -123,6 +124,7 @@ export function History() {
 
   return (
     <div className="history-page workspace-page">
+      {savedPredictionId && <p role="status" className="text-sm text-emerald-700">La predicción quedó guardada en el historial.</p>}
       {error && <p role="status" className="text-sm text-red-500">No se pudo actualizar el historial. Se muestran los datos anteriores.</p>}
       <header className="module-heading"><div><h1>Historial de predicciones</h1><p>Revisa tus análisis anteriores y vuelve a cada resultado.</p></div><button className="module-primary" onClick={() => navigate("/predicciones/nueva")}><BarChart3 size={16}/>Nueva predicción</button></header>
 
@@ -347,6 +349,10 @@ export function History() {
                 </div>
 
                 {/* Metrics row */}
+                {record.status === ExecutionStatus.Completed && <p className="mb-3 text-sm text-gray-600">
+                  Precisión {record.accuracy == null ? "—" : `${record.accuracy.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}
+                  {" · "}Productos {record.totalProducts ?? "—"}
+                </p>}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
                     <p

@@ -14,7 +14,7 @@ import { relativeTime } from "../../lib/transforms";
 import type { DashboardMetricsResponse, DashboardSummaryResponse } from "../../types/api";
 
 const tips = [
-  { icon: AlertTriangle, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20", title: "Revisa los críticos primero", desc: "Revisa primero los productos con mayor demanda prevista y contrasta las cantidades con tu stock." },
+  { icon: AlertTriangle, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20", title: "Revisa los críticos primero", desc: "Consulta en el plan de compras los productos cuyo stock cubre menos del 25 % de la demanda prevista." },
   { icon: Zap, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20", title: "Optimiza el ciclo de compras", desc: "Agrupa los productos por proveedor antes de preparar tu pedido." },
   { icon: Lightbulb, color: "text-yellow-500", bg: "bg-yellow-500/10 border-yellow-500/20", title: "Actualiza tu inventario", desc: "Subir datos de inventario actualizados mejora la precisión de la predicción." },
 ];
@@ -102,9 +102,9 @@ export function Dashboard() {
               icon: Clock, iconColor: "text-blue-500", iconBg: "bg-blue-500/10 border-blue-500/20",
             },
             {
-              label: "Productos críticos",
-              value: (summary?.criticalCount ?? 0).toString(),
-              icon: AlertTriangle, iconColor: "text-red-500", iconBg: "bg-red-500/10 border-red-500/20",
+              label: "Productos analizados",
+              value: summary?.totalProducts?.toString() ?? "—",
+              icon: Package, iconColor: "text-blue-500", iconBg: "bg-blue-500/10 border-blue-500/20",
             },
             {
               label: "Precisión promedio",
@@ -187,7 +187,7 @@ export function Dashboard() {
                   style={{ fontSize: "0.8125rem" }}>
                   Ver análisis completo
                 </button>
-                <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("pdf", summary.latestPredictionId, summary.forecastPeriod ?? 30)}
+                <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("pdf", summary.latestPredictionId)}
                   className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
                   style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
 <Download className="h-4 w-4" />Exportar PDF

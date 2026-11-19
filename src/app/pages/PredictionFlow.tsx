@@ -90,7 +90,6 @@ export function PredictionFlow() {
     }, 250);
     return () => window.clearInterval(timer);
   }, [analysisStatus]);
-  const [completedStepIdx, setCompletedStepIdx] = useState(-1);
 
   /* ── Step 2 variable mapping ── */
   const [mappingTab, setMappingTab] = useState<"sales" | "inventory">("sales");
@@ -126,6 +125,16 @@ export function PredictionFlow() {
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
     isLoggedIn && !finishing.current && hasDraft && currentLocation.pathname !== nextLocation.pathname
   );
+  useEffect(() => {
+    if (!isLoggedIn || !hasDraft) return;
+    const confirmLeave = (event: BeforeUnloadEvent) => {
+      if (finishing.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", confirmLeave);
+    return () => window.removeEventListener("beforeunload", confirmLeave);
+  }, [hasDraft, isLoggedIn]);
   const [restoreError, setRestoreError] = useState("");
   const [restoringPrediction, setRestoringPrediction] = useState(currentStep >= 3 && !prediction);
   useEffect(() => {
@@ -162,6 +171,8 @@ export function PredictionFlow() {
     return prediction ? extractAccuracy(prediction.metrics) : null;
   }, [prediction]);
   const recordCount = files.reduce((sum, file) => sum + (file.rows || 0), 0);
+  const inventoryCatalogReady = ["inv_product", "stock"].every(key =>
+    fieldCatalog.some(field => field.fieldType === "inventory" && field.fieldKey === key && field.isRequired));
 
   /* ── Load field catalog + saved mappings when entering step 2 ── */
   useEffect(() => {
@@ -187,11 +198,11 @@ export function PredictionFlow() {
     const mapping: Record<string, string> = {};
     const missing: string[] = [];
     config.fields.forEach((field) => {
-      if (!fieldCatalog.some(f => f.fieldType === "sales" && f.isRequired && f.fieldKey === field.fieldKey)) return;
+      if (!fieldCatalog.some(f => f.fieldType === "sales" && f.fieldKey === field.fieldKey)) return;
       if (detectedSalesCols.includes(field.datasetColumnName)) mapping[field.fieldKey] = field.datasetColumnName;
       else missing.push(field.datasetColumnName);
     });
-    setAppliedMappingId(null);
+    setAppliedMappingId(config.id);
     setSalesMapping(mapping);
     setMappingWarning(missing.length
       ? "Algunas columnas de esta configuración no están en el archivo. Revisa los campos sin asignar."
@@ -199,13 +210,14 @@ export function PredictionFlow() {
   };
 
   useEffect(() => {
-    if (currentStep !== 2 || savedMappingsLoading || !savedMappings.length || !primaryDatasetId || !detectedSalesCols.length ||
+    if (currentStep !== 2 || fieldCatalogLoading || !fieldCatalog.length || savedMappingsLoading || !savedMappings.length || !primaryDatasetId || !detectedSalesCols.length ||
         defaultAppliedFor.current === primaryDatasetId) return;
     defaultAppliedFor.current = primaryDatasetId;
     if (appliedMappingId || Object.keys(salesMapping).length > 0) return;
-    const config = savedMappings.find((mapping) => mapping.isDefault);
+    const config = savedMappings.find(mapping => mapping.isDefault && mapping.fields.some(saved =>
+      fieldCatalog.some(field => field.fieldType === "sales" && field.fieldKey === saved.fieldKey)));
     if (config) applySavedMapping(config);
-  }, [currentStep, savedMappingsLoading, savedMappings, primaryDatasetId, detectedSalesCols, appliedMappingId, salesMapping]);
+  }, [currentStep, fieldCatalogLoading, fieldCatalog, savedMappingsLoading, savedMappings, primaryDatasetId, detectedSalesCols, appliedMappingId, salesMapping]);
 
   /* ── File upload handler ── */
   const uploadFile = useCallback(
@@ -236,8 +248,8 @@ export function PredictionFlow() {
       } catch (err) {
         if (!isCurrent()) return;
         const msg = err instanceof Error ? err.message : "No se pudo validar el archivo.";
-        setFiles(prev => prev.map(f => f.type === type ? { ...f, validating: false, validated: false, rawFile: undefined, uploadError: msg } : f));
-        setUploadError(msg);
+        setFiles(prev => prev.filter(f => f.type !== type));
+        setUploadError(`${file.name}: ${msg}`);
       }
     },
     [] // no closure deps — all setters are stable references from useState
@@ -273,12 +285,12 @@ export function PredictionFlow() {
     [uploadFile]
   );
 
-  const removeFile = (name: string) => {
+  const removeFile = (type: UploadedFile["type"]) => {
     if (uploadLock.current) return;
-    const f = files.find((x) => x.name === name);
+    const f = files.find((x) => x.type === type);
     if (f) uploadVersions.current[f.type]++;
     setUploadError("");
-    setFiles((prev) => prev.filter((x) => x.name !== name));
+    setFiles((prev) => prev.filter((x) => x.type !== type));
     if (f?.type === "sales") {
       if (f.datasetId === primaryDatasetId) setPrimaryDatasetId(null);
       setDetectedSalesCols([]);
@@ -294,31 +306,18 @@ export function PredictionFlow() {
   const runAnalysis = useCallback(async () => {
     setAnalysisStatus("running");
     setAnalysisSeconds(0);
-    setCompletedStepIdx(-1);
     setAnalysisError("");
     setPurchasePlan(null);
 
-    const total = PIPELINE_STEPS.length;
-
     if (primaryDatasetId) {
-      // Real API mode — animate steps gradually while waiting
-      const stageDurations = [1000, 1800, 2200, 4000];
-      const started = performance.now();
-      let visualStage = 0;
-      const animInterval = window.setInterval(() => {
-        let elapsed = performance.now() - started;
-        let stage = 0;
-        while (stage < stageDurations.length && elapsed >= stageDurations[stage]) {
-          elapsed -= stageDurations[stage];
-          stage++;
-        }
-        visualStage = stage;
-        setCompletedStepIdx(stage - 1);
-      }, 150);
-
       try {
+        const invDatasetId = files.find(f => f.type === "inventory")?.datasetId;
+        if (invDatasetId) {
+          await datasetService.validateInventory(invDatasetId, inventoryMapping.inv_product, inventoryMapping.stock, inventoryMapping.purchase_cost);
+          if (finishing.current) return;
+        }
         // Resolve or create mapping config before triggering prediction
-        let resolvedMappingId: string | undefined = appliedMappingId ?? undefined;
+        let resolvedMappingId: string | undefined;
 
         const requiredCatalogFields = fieldCatalog.filter(
           (f) => f.isRequired && f.fieldType === "sales"
@@ -333,7 +332,7 @@ export function PredictionFlow() {
 
           // Build field entries from current salesMapping
           const fieldEntries = Object.entries(salesMapping)
-            .filter(([key, col]) => col && requiredCatalogFields.some(f => f.fieldKey === key))
+            .filter(([key, col]) => detectedSalesCols.includes(col) && fieldCatalog.some(f => f.fieldType === "sales" && f.fieldKey === key))
             .map(([fieldKey, datasetColumnName]) => ({ fieldKey, datasetColumnName }));
 
           // Reuse an existing mapping when the field configuration already matches
@@ -348,6 +347,7 @@ export function PredictionFlow() {
 
           if (columnMatch) {
             resolvedMappingId = columnMatch.id;
+            if (saveAsDefault && !columnMatch.isDefault) await mappingService.setDefault(columnMatch.id);
           } else {
             const autoName = mappingName.trim() ||
               `pharmacast-${new Date().toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })}-${Date.now().toString(36)}`;
@@ -363,8 +363,6 @@ export function PredictionFlow() {
         console.log("[PredictionFlow] POST /api/predicciones/nuevas — executing prediction, datasetId:", primaryDatasetId, "forecastDays:", forecastDays, "mappingId:", resolvedMappingId);
         const result = await predictionService.execute(primaryDatasetId, forecastDays, resolvedMappingId);
 
-        clearInterval(animInterval);
-
         if (finishing.current) return;
         if (result.executionStatus === ExecutionStatus.Failed) {
           setAnalysisError(result.errorMessage ?? "La predicción falló. Verifica tu archivo e intenta de nuevo.");
@@ -374,31 +372,27 @@ export function PredictionFlow() {
 
         sessionStorage.setItem(`prediction-draft:${user?.email ?? "guest"}:prediction`, JSON.stringify({ id: result.id }));
         setPrediction(result);
-        const invDatasetId = files.find(f => f.type === "inventory")?.datasetId;
         purchasePlanService.generate(result.id, undefined, invDatasetId,
           invDatasetId && Object.keys(inventoryMapping).length ? inventoryMapping : undefined)
           .then(plan => { if (!finishing.current) setPurchasePlan(plan); })
           .catch(() => { /* The shared plan view offers an explicit retry; prediction remains saved. */ });
-        // Finish the visual sequence; the saved plan continues in the background.
-        for (let stage = visualStage; stage < 4; stage++) {
-          setCompletedStepIdx(stage);
-          await new Promise(resolve => window.setTimeout(resolve, 300));
-        }
-        setCompletedStepIdx(3);
-        await new Promise(resolve => window.setTimeout(resolve, 700));
-        setCompletedStepIdx(4);
-        setCompletedStepIdx(total - 1);
         setAnalysisStatus("done");
       } catch (err) {
-        clearInterval(animInterval);
-        setAnalysisError("No se pudo completar el análisis. Revisa las columnas asignadas y vuelve a intentarlo.");
+        if (finishing.current) return;
+        setAnalysisError(extractApiErrorMessage(err, "No se pudo completar el análisis. Revisa las columnas asignadas y vuelve a intentarlo."));
         setAnalysisStatus("error");
       }
     } else {
       setAnalysisError("Carga un archivo de ventas válido antes de ejecutar el análisis.");
       setAnalysisStatus("error");
     }
-  }, [primaryDatasetId, forecastDays, files, salesMapping, appliedMappingId, mappingName, saveAsDefault, fieldCatalog, inventoryMapping, user?.email]);
+  }, [primaryDatasetId, forecastDays, files, salesMapping, mappingName, saveAsDefault, fieldCatalog, detectedSalesCols, inventoryMapping, user?.email]);
+
+  useEffect(() => {
+    if (currentStep !== 3 || analysisStatus !== "done" || blocker.state === "blocked") return;
+    const timer = window.setTimeout(() => setCurrentStep(4), 5000);
+    return () => window.clearTimeout(timer);
+  }, [currentStep, analysisStatus, blocker.state, setCurrentStep]);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -414,6 +408,7 @@ export function PredictionFlow() {
       if (files.some(f => f.uploading || f.uploadError || !f.datasetId)) return false;
       for (const type of ["sales", "inventory"] as const) {
         if (!files.some(f => f.type === type)) continue;
+        if (type === "inventory" && !inventoryCatalogReady) return false;
         const columns = type === "sales" ? detectedSalesCols : detectedInvCols;
         const mapping = type === "sales" ? salesMapping : inventoryMapping;
         const required = fieldCatalog.filter(f => f.fieldType === type && f.isRequired);
@@ -489,7 +484,9 @@ export function PredictionFlow() {
             <h2 id="leave-title" className="text-lg font-semibold">¿Salir de la predicción?</h2>
             <p className="mt-3 text-sm leading-6 text-gray-500">{prediction
               ? "El análisis ya está guardado en el historial. Al salir se cerrará este recorrido."
-              : "Tienes una predicción en curso. Al salir se borrará la configuración de este recorrido."}</p>
+              : analysisStatus === "running"
+              ? "El análisis está en curso. Si sales, se cerrará este recorrido. Si el análisis termina correctamente, la predicción quedará guardada en el historial."
+              : "Al salir se borrará la configuración de este recorrido."}</p>
             <div className="mt-6 flex justify-end gap-3">
               <button autoFocus onClick={() => blocker.reset()} className="rounded-full border border-gray-300 px-4 py-2 text-sm">Continuar aquí</button>
               <button onClick={() => { finishing.current = true; clearPredictionDraft(); blocker.proceed(); }} className="rounded-full bg-blue-500 px-4 py-2 text-sm text-white">Salir</button>
@@ -571,7 +568,7 @@ export function PredictionFlow() {
                               {salesFile ? "Cambiar" : "+ Seleccionar"}
                             </button>
                             {salesFile && (
-                              <button onClick={() => removeFile(salesFile.name)}
+                              <button onClick={() => removeFile("sales")}
                                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-400 hover:bg-red-100 transition-all"
                                 style={{ fontSize: "0.75rem" }}>
                                 Quitar
@@ -581,7 +578,7 @@ export function PredictionFlow() {
                           {salesFile && (
                             <p className="text-gray-400" style={{ fontSize: "0.7rem" }}>
                               {formatSize(salesFile.size)}{salesFile.rows != null && ` · ${salesFile.rows.toLocaleString()} filas`}
-                              {salesFile.validating && " · Validando…"}{salesFile.validated && !salesFile.datasetId && !salesFile.uploading && " · Listo para subir"}{salesFile.uploading && " · Subiendo…"}{salesFile.datasetId && !salesFile.uploadError && " · Subido"}{salesFile.uploadError && " · No válido"}
+                              {salesFile.validating && " · Validando…"}{salesFile.validated && !salesFile.datasetId && !salesFile.uploading && " · Validado"}{salesFile.uploading && " · Subiendo…"}{salesFile.datasetId && !salesFile.uploadError && " · Subido"}{salesFile.uploadError && " · No válido"}
                             </p>
                           )}
                         </div>
@@ -618,7 +615,7 @@ export function PredictionFlow() {
                               {invFile ? "Cambiar" : "+ Seleccionar"}
                             </button>
                             {invFile && (
-                              <button onClick={() => removeFile(invFile.name)}
+                              <button onClick={() => removeFile("inventory")}
                                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-400 hover:bg-red-100 transition-all"
                                 style={{ fontSize: "0.75rem" }}>
                                 Quitar
@@ -628,7 +625,7 @@ export function PredictionFlow() {
                           {invFile && (
                             <p className="text-gray-400" style={{ fontSize: "0.7rem" }}>
                               {formatSize(invFile.size)}{invFile.rows != null && ` · ${invFile.rows.toLocaleString()} filas`}
-                              {invFile.validating && " · Validando…"}{invFile.validated && !invFile.datasetId && !invFile.uploading && " · Listo para subir"}{invFile.uploading && " · Subiendo…"}{invFile.datasetId && !invFile.uploadError && " · Subido"}{invFile.uploadError && " · No válido"}
+                              {invFile.validating && " · Validando…"}{invFile.validated && !invFile.datasetId && !invFile.uploading && " · Validado"}{invFile.uploading && " · Subiendo…"}{invFile.datasetId && !invFile.uploadError && " · Subido"}{invFile.uploadError && " · No válido"}
                             </p>
                           )}
                         </div>
@@ -638,7 +635,7 @@ export function PredictionFlow() {
                 </div>
 
                 {uploadError && (
-                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <div role="alert" className="mt-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                     <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
                     <p className="text-red-600" style={{ fontSize: "0.8125rem" }}>{uploadError}</p>
                   </div>
@@ -679,6 +676,9 @@ export function PredictionFlow() {
             const salesCatalogFields = fieldCatalog.filter((f) => f.fieldType === "sales");
             const invCatalogFields   = fieldCatalog.filter((f) => f.fieldType === "inventory");
             const activeReqVars = (mappingTab === "sales" ? salesCatalogFields : invCatalogFields).filter((f) => f.isRequired).map((f) => ({ key: f.fieldKey, label: f.displayName, desc: "" }));
+            const optionalKey = mappingTab === "sales" ? "category" : "purchase_cost";
+            const optionalField = (mappingTab === "sales" ? salesCatalogFields : invCatalogFields)
+              .find(field => field.fieldKey === optionalKey && !field.isRequired);
             const activeCols = mappingTab === "sales" ? salesCols : invCols;
             const hasActiveFile = mappingTab === "sales" ? hasSales : hasInventory;
             const salesReqFields = salesCatalogFields.filter((f) => f.isRequired);
@@ -838,6 +838,11 @@ export function PredictionFlow() {
                       </div>
                     ) : (
                       <div className="space-y-5">
+                        {mappingTab === "inventory" && !fieldCatalogLoading && !inventoryCatalogReady && (
+                          <p role="alert" className="text-sm text-red-600">
+                            El catálogo de inventario debe tener activos los campos obligatorios Producto y Stock.
+                          </p>
+                        )}
                         <div>
                           <p className="text-gray-700 mb-2 flex items-center gap-2" style={{ fontFamily: "inherit", fontSize: "0.8125rem", fontWeight: 600, letterSpacing: 0 }}>Columnas detectadas en el archivo</p>
                           <div className="flex flex-wrap gap-2">
@@ -856,25 +861,33 @@ export function PredictionFlow() {
                         <div>
                           <div className="flex items-center gap-2 mb-3">
                             <span className="h-2 w-2 rounded-full bg-red-500" />
-                            <p className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Variables requeridas</p>
+                            <p className="text-gray-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Mapeo de variables</p>
                             <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-500" style={{ fontSize: "0.6875rem", fontWeight: 600 }}>
                               {activeReqVars.filter((v) => activeMapping[v.key]).length}/{activeReqVars.length} asignadas
                             </span>
                           </div>
                           <div className="space-y-2">
-                            {activeReqVars.map((v) => {
+                            {[...activeReqVars, ...(optionalField ? [{
+                              key: optionalField.fieldKey, label: optionalField.displayName,
+                              desc: mappingTab === "inventory" ? "Costo de adquisición por unidad en soles." : "",
+                            }] : [])].map((v) => {
                               const val = activeMapping[v.key] ?? "";
                               const isMapped = !!val;
                               return (
                                 <div key={v.key} className={`prediction-mapping-row flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${isMapped ? "border-blue-500/25 bg-blue-500/5" : "border-gray-200 bg-white"}`}>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-gray-900" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
-                                      {v.label} <span className="text-red-400">*</span>
+                                      {v.label} {v.key === optionalField?.fieldKey
+                                        ? <span className="text-gray-400">(opcional)</span>
+                                        : <span className="text-red-400">*</span>}
                                     </p>
                                     <p className="text-gray-400" style={{ fontSize: "0.6875rem" }}>{v.desc}</p>
                                   </div>
                                   <div className="relative shrink-0" style={{ minWidth: 185 }}>
-                                    <Select value={val || "unassigned"} onValueChange={(value) => setActiveMapping((mapping) => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }))}>
+                                    <Select value={val || "unassigned"} onValueChange={(value) => {
+                                      if (mappingTab === "sales") setAppliedMappingId(null);
+                                      setActiveMapping(mapping => ({ ...mapping, [v.key]: value === "unassigned" ? "" : value }));
+                                    }}>
                                       <SelectTrigger aria-label={v.label} className="pc-column-select"><SelectValue /></SelectTrigger>
                                       <SelectContent className="pc-select-menu" position="popper" align="start">
                                         <SelectItem value="unassigned">Seleccionar columna…</SelectItem>
@@ -966,17 +979,10 @@ export function PredictionFlow() {
 
                     <div className="analysis-pipeline-grid">
                       {PIPELINE_STEPS.map((step, i) => {
-                        const isDone = i <= completedStepIdx;
-                        const isActive = i === completedStepIdx + 1;
                         return (
-                          <div key={step.label} className={`analysis-stage-item ${isActive ? "is-active" : ""} ${isDone ? "is-done" : ""}`}>
-                            <span className="analysis-stage-indicator">
-                              {isDone ? <CheckCircle size={16} /> : isActive
-                                ? <i className="analysis-stage-spinner" aria-hidden="true" />
-                                : String(i + 1).padStart(2, "0")}
-                            </span>
+                          <div key={step.label} className="analysis-stage-item">
+                            <span className="analysis-stage-indicator">{String(i + 1).padStart(2, "0")}</span>
                             <span className="analysis-stage-name">{step.label}</span>
-                            {isActive && <span className="analysis-stage-status">En curso</span>}
                           </div>
                         );
                       })}
@@ -999,6 +1005,11 @@ export function PredictionFlow() {
 
                     <AnalysisMetrics items={[
                       { label: "Precisión", icon: BarChart3, value: accuracy != null ? `${accuracy}%` : "—" },
+                      ...(["rmse", "wape"] as const).map(metric => {
+                        const value = prediction?.metrics.find(row => row.method === "XGBoost" && row.scope === "Overall")?.[metric];
+                        return { label: metric.toUpperCase(), icon: Activity,
+                          value: value == null ? "No disponible" : `${value.toLocaleString("es-PE", { maximumFractionDigits: 2 })}${metric === "wape" ? "%" : " uds"}` };
+                      }),
                       { label: "Productos analizados", icon: Package, value: products.length.toLocaleString("es-PE") },
                       { label: "Horizonte", icon: Calendar, value: `${forecastDays} días` },
                     ]} />
@@ -1014,6 +1025,7 @@ export function PredictionFlow() {
             <div className="analysis-surface">
               <PredictionAnalysis key={prediction.id} executionId={prediction.id}
                 view={currentStep === 4 ? "demand" : "purchase"}
+                showPlanTotals
                 initialPrediction={prediction} initialPlan={purchasePlan} onPlanReady={setPurchasePlan}
                 preparePlan={() => {
                   const inventory = files.find(file => file.type === "inventory")?.datasetId;
@@ -1054,7 +1066,7 @@ export function PredictionFlow() {
             onClick={() => {
               finishing.current = true;
               clearPredictionDraft();
-              navigate("/historial");
+              navigate("/historial", { state: { savedPredictionId: prediction?.id } });
             }}
             className="flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-white transition-all hover:bg-blue-400 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ fontSize: "0.875rem", fontWeight: 600 }}

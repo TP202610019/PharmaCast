@@ -97,7 +97,7 @@ export interface DashboardSummaryResponse {
   latestStatus: ExecutionStatus | null;
   accuracy: number | null;
   totalProducts: number;
-  criticalCount: number;
+  criticalCount: number | null;
   totalForecastedUnits: number;
   productNames: string[];
   salesProductColumn: string | null;
@@ -108,7 +108,7 @@ export interface DashboardProductRow {
   productName: string;
   totalPredictedQuantity: number;
   avgPredictedQuantity: number;
-  priority: "critical" | "high" | "medium" | "low";
+  priority: string | null;
   historicalAvg: number | null;
 }
 
@@ -232,7 +232,8 @@ export interface PredictionMetricResponse {
 
 export interface PredictionResponse {
   forecastFrequency?: "Daily" | "Weekly";
-  productSummaries?: { productName: string; totalPredicted: number; averageDailyPredicted: number; historicalAvg: number | null; variationPercent: number | null }[];
+  confidenceLevel?: number | null;
+  productSummaries?: { productName: string; category?: string | null; trend?: "up" | "down" | "steady" | null; totalPredicted: number; averageDailyPredicted: number; historicalAvg: number | null; variationPercent: number | null }[];
   productMetrics?: PredictionMetricResponse[];
   baselineMetrics?: PredictionMetricResponse[];
   baselineProductMetrics?: PredictionMetricResponse[];
@@ -249,6 +250,7 @@ export interface PredictionResponse {
 }
 
 export interface PredictionSummaryResponse {
+  criticalCount?: number | null;
   totalProducts?: number | null;
   totalUnits?: number | null;
   accuracy?: number | null;
@@ -270,16 +272,20 @@ export interface GeneratePurchasePlanRequest {
   inventoryFieldMappings?: Record<string, string>;
 }
 
+export type PurchasePriority = "critical" | "high" | "medium" | "low" | "none";
+
 export interface PurchasePlanItemResponse {
   id: string;
   productName: string;
   recommendedQuantity: number;
   demandPredicted: number | null;
   stockActual: number | null;
+  priority?: PurchasePriority | null;
   toPurchase: number | null;
   category: string | null;
   supplier: string | null;
   estimatedCost: number | null;
+  unitPurchaseCost?: number | null;
 }
 
 export interface PurchasePlanResponse {
@@ -288,6 +294,8 @@ export interface PurchasePlanResponse {
   planName: string;
   generatedAt: string;
   items: PurchasePlanItemResponse[];
+  totalEstimatedCost?: number | null;
+  itemsMissingPurchaseCost?: number;
   createdAt: string;
 }
 

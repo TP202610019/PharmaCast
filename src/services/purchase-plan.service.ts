@@ -20,7 +20,7 @@ export const purchasePlanService = {
       inventoryDatasetId,
       inventoryFieldMappings,
     };
-    return withCache(`plan:${predictionExecutionId}`, async () => {
+    return withCache(`generate-plan:${predictionExecutionId}`, async () => {
       try {
         const { data } = await http.post<ApiResponse<PurchasePlanResponse>>("/api/purchase-plans", body);
         invalidateAnalysisLists();
@@ -30,7 +30,7 @@ export const purchasePlanService = {
         const { data } = await http.get<ApiResponse<PurchasePlanResponse>>(`/api/purchase-plans/by-execution/${predictionExecutionId}`);
         return data.data!;
       }
-    }, 10 * 60_000);
+    }, 0, `plan:${predictionExecutionId}`);
   },
 
   async getById(id: string): Promise<PurchasePlanResponse> {

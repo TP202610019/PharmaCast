@@ -251,11 +251,11 @@ export function HistoryDetail() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("csv", summary.latestPredictionId, summary.forecastPeriod ?? 30)} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
+          <button onClick={() => id && exportSavedPurchase("csv", id)} className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all"
             style={{ fontSize: "0.8125rem" }}>
 <Download className="h-4 w-4" />Exportar CSV
           </button>
-          <button onClick={() => summary?.latestPredictionId && exportSavedPurchase("pdf", summary.latestPredictionId, summary.forecastPeriod ?? 30)} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
+          <button onClick={() => id && exportSavedPurchase("pdf", id)} className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-400 transition-all"
             style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
 <Download className="h-4 w-4" />Exportar PDF
           </button>
