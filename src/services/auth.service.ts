@@ -15,6 +15,11 @@ export const authService = {
     return data.data!;
   },
 
+  async loginDemo(): Promise<AuthResponse> {
+    const { data } = await http.post<ApiResponse<AuthResponse>>("/api/auth/demo");
+    return data.data!;
+  },
+
   async register(fullName: string, email: string, password: string): Promise<AuthResponse> {
     const body: RegisterRequest = { fullName, email, password };
     const { data } = await http.post<ApiResponse<AuthResponse>>("/api/auth/register", body);

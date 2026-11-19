@@ -141,6 +141,7 @@ export function buildChartFromBackendPoints(
     const history = new Map<number, number>();
     for (const point of historicalPoints) {
       const time = new Date(point.date.slice(0, 10) + "T00:00:00Z").getTime();
+      if (time >= origin) continue;
       const block = Math.floor((time - origin) / (7 * dayMs));
       history.set(block, (history.get(block) ?? 0) + point.quantity);
     }
@@ -150,6 +151,11 @@ export function buildChartFromBackendPoints(
       const end = new Date(origin + (block * 7 + 6) * dayMs).toISOString();
       return { date: range(start, end), weekRange: range(start, end), historical: quantity, predicted: null, upper: null, lower: null };
     });
+    // Visual anchor only: do not add an observation or change forecast totals.
+    const lastHistoryDay = historicalPoints.map(p => p.date.slice(0, 10)).sort().at(-1);
+    const previousDay = new Date(origin - dayMs).toISOString().slice(0, 10);
+    const lastPast = past.at(-1);
+    if (lastPast && lastHistoryDay === previousDay) lastPast.forecastAnchor = lastPast.historical!;
     return [...past, ...forecast.map(p => ({ date: range(p.date, p.periodEnd!), weekRange: range(p.date, p.periodEnd!),
       historical: null, predicted: p.predicted, upper: p.upper ?? null, lower: p.lower ?? null }))];
   }

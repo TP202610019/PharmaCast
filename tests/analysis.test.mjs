@@ -228,3 +228,22 @@ test('login returns to the original permitted route and rejects external or unkn
   for (const url of ['/historial','/historial/analysis-1','/historial?estado=completado#lista','/predicciones/nueva','/panel']) assert.equal(authDestination(url), url);
   for (const url of [undefined,null,'https://example.com','//example.com','/admin','/acceso','/historial/../acceso','/panelx']) assert.equal(authDestination(url), '/panel');
 });
+
+
+test('weekly forecasts join the adjacent historical block without changing quantities', () => {
+  const chart = transforms.buildChartFromBackendPoints([
+    { date: '2026-11-05', periodEnd: '2026-11-11', predicted: 2, upper: null, lower: null },
+    { date: '2026-11-12', periodEnd: '2026-11-13', predicted: 1, upper: null, lower: null },
+  ], 9, [{ date: '2026-11-03', quantity: 3 }, { date: '2026-11-04', quantity: 5 }]);
+  assert.equal(chart[0].historical, 8);
+  assert.equal(chart[0].forecastAnchor, 8);
+  assert.equal(chart[0].predicted, null);
+  assert.equal(chart[1].predicted, 2);
+  assert.equal(chart[2].predicted, 1);
+  assert.equal(chart.reduce((sum, point) => sum + (point.predicted ?? 0), 0), 3);
+  assert.equal(chart[2].upper, null);
+  const gap = transforms.buildChartFromBackendPoints([
+    { date: '2026-11-05', periodEnd: '2026-11-11', predicted: 2 },
+  ], 7, [{ date: '2026-10-20', quantity: 4 }]);
+  assert.equal(gap[0].forecastAnchor, undefined);
+});

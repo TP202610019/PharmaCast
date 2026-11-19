@@ -11,5 +11,5 @@ export function requestDemoAccess() {
 
 export function isDemoWrite(method: string, path: string): boolean {
   if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) return false;
-  return !/^\/api\/auth\/(login|register|refresh|logout)\/?$/.test(path.split("?")[0]);
+  return !/^\/api\/auth\/(login|demo|register|refresh|logout)\/?$/.test(path.split("?")[0]);
 }

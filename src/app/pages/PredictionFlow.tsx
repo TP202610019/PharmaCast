@@ -981,11 +981,15 @@ export function PredictionFlow() {
                       </div>
                     </div>
 
+                    <p className="text-gray-400 text-xs mt-4">Progreso estimado; esperando la confirmación del servidor.</p>
                     <div className="analysis-pipeline-grid">
                       {PIPELINE_STEPS.map((step, i) => {
+                        const estimatedStage = Math.min(PIPELINE_STEPS.length - 1, Math.floor(analysisSeconds / 6));
+                        const isDone = i < estimatedStage;
+                        const isActive = i === estimatedStage;
                         return (
-                          <div key={step.label} className="analysis-stage-item">
-                            <span className="analysis-stage-indicator">{String(i + 1).padStart(2, "0")}</span>
+                          <div key={step.label} className={`analysis-stage-item ${isActive ? "is-active" : ""} ${isDone ? "is-done" : ""}`}>
+                            <span className="analysis-stage-indicator">{isDone ? <CheckCircle size={16}/> : isActive ? <i className="analysis-stage-spinner" aria-hidden="true"/> : String(i + 1).padStart(2, "0")}</span>
                             <span className="analysis-stage-name">{step.label}</span>
                           </div>
                         );

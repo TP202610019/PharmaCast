@@ -3,7 +3,7 @@ import { authService } from "../../services/auth.service";
 import { setTokens, clearTokens, getAccessToken, getRefreshToken, STORAGE } from "../../lib/http";
 import { invalidateDashboardCache } from "../../lib/dashboardCache";
 import { isDemoEmail } from "../../lib/demoAccess";
-import type { ApiError } from "../../types/api";
+import type { AuthResponse, ApiError } from "../../types/api";
 
 export interface UserData {
   id: string;
@@ -55,8 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<UserData | null>(loadStoredUser);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const auth = await authService.login(email, password);
+  const completeLogin = useCallback((auth: AuthResponse) => {
     for (const key of Object.keys(sessionStorage)) {
       if (key.startsWith("prediction-draft:")) sessionStorage.removeItem(key);
     }
@@ -75,12 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoggedIn(true);
   }, []);
 
+  const login = useCallback(async (email: string, password: string) => {
+    completeLogin(await authService.login(email, password));
+  }, [completeLogin]);
+
   const loginDemo = useCallback(async () => {
-    const email = import.meta.env.VITE_DEMO_EMAIL;
-    const password = import.meta.env.VITE_DEMO_PASSWORD;
-    if (!email || !password) throw new Error("La cuenta demo no está configurada en este entorno.");
-    await login(email, password);
-  }, [login]);
+    completeLogin(await authService.loginDemo());
+  }, [completeLogin]);
 
   const register = useCallback(async (
     fullName: string,
