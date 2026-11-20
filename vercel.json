@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
+    { "source": "/services/ml/:path*", "destination": "https://api.pharmacast.online/services/ml/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -336,6 +336,8 @@ export interface PlanEvaluationSummary {
 }
 
 export interface PlanEvaluationResponse {
+  minimumHistoricalDays?: number;
+  notEvaluableProducts?: string[];
   planId: string;
   pharmaCastTotalAbsoluteGap: number;
   pharmacyTotalAbsoluteGap: number | null;

@@ -587,6 +587,15 @@ export function HistoryDetail() {
                 <p className="mb-4 text-xs text-gray-500">
                   La brecha es la distancia entre la cantidad del plan y las ventas reales. La comparación orienta tu decisión de compra.
                 </p>
+                {Boolean(planEvalResult.notEvaluableProducts?.length) && (
+                  <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <p className="font-semibold">Productos no evaluables</p>
+                    <p>Historial insuficiente. Se requieren {planEvalResult.minimumHistoricalDays} días de cobertura por producto.</p>
+                    <ul className="mt-2 list-disc pl-5">
+                      {planEvalResult.notEvaluableProducts?.map(product => <li key={product}>{product} · No evaluable</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div className={`grid gap-4 ${planEvalResult.summary.hasPharmacyPlan ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
                   <div className="rounded-xl bg-blue-50 border border-blue-100 p-4">
                     <p className="text-blue-600 mb-1" style={{ fontSize: "0.75rem", fontWeight: 600 }}>Efectividad PharmaCast</p>
