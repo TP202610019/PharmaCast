@@ -311,6 +311,7 @@ export function PredictionFlow() {
     setAnalysisError("");
     setPurchasePlan(null);
 
+    let stage = "Validación de inventario";
     if (primaryDatasetId) {
       try {
         const invDatasetId = files.find(f => f.type === "inventory")?.datasetId;
@@ -318,6 +319,7 @@ export function PredictionFlow() {
           await datasetService.validateInventory(invDatasetId, inventoryMapping.inv_product, inventoryMapping.stock, inventoryMapping.purchase_cost);
           if (finishing.current) return;
         }
+        stage = "Configuración del mapeo";
         // Resolve or create mapping config before triggering prediction
         let resolvedMappingId: string | undefined;
 
@@ -363,11 +365,12 @@ export function PredictionFlow() {
         }
 
         console.log("[PredictionFlow] POST /api/predicciones/nuevas — executing prediction, datasetId:", primaryDatasetId, "forecastDays:", forecastDays, "mappingId:", resolvedMappingId);
+        stage = "Solicitud de análisis";
         const result = await predictionService.execute(primaryDatasetId, forecastDays, resolvedMappingId);
 
         if (finishing.current) return;
         if (result.executionStatus === ExecutionStatus.Failed) {
-          setAnalysisError(result.errorMessage ?? "La predicción falló. Verifica tu archivo e intenta de nuevo.");
+          setAnalysisError(result.errorMessage ?? "Etapa: Ejecución del modelo. La predicción falló. Verifica tu archivo e intenta de nuevo.");
           setAnalysisStatus("error");
           return;
         }
@@ -381,11 +384,12 @@ export function PredictionFlow() {
         setAnalysisStatus("done");
       } catch (err) {
         if (finishing.current) return;
-        setAnalysisError(extractApiErrorMessage(err, "No se pudo completar el análisis. Revisa las columnas asignadas y vuelve a intentarlo."));
+        const message = extractApiErrorMessage(err, "No se pudo completar el análisis. Revisa las columnas asignadas y vuelve a intentarlo.");
+        setAnalysisError(`Etapa: ${stage}. ${message}`);
         setAnalysisStatus("error");
       }
     } else {
-      setAnalysisError("Carga un archivo de ventas válido antes de ejecutar el análisis.");
+      setAnalysisError("Etapa: Carga de datos. Carga un archivo de ventas válido antes de ejecutar el análisis.");
       setAnalysisStatus("error");
     }
   }, [primaryDatasetId, forecastDays, files, salesMapping, mappingName, saveAsDefault, fieldCatalog, detectedSalesCols, inventoryMapping, user?.email]);
