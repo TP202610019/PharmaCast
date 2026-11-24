@@ -1,3 +1,4 @@
+import { ForecastEvaluation } from "../components/ForecastEvaluation";
 import { PredictionAnalysis } from "../components/PredictionAnalysis";
 import { WorkspaceError } from "../components/WorkspaceError";
 import { WorkspaceLoading } from "../components/WorkspaceLoading";
@@ -38,7 +39,7 @@ export function HistoryDetail() {
   const [notFound, setNotFound] = useState(false);
 
   // ── UI ──
-  const [activeTab, setActiveTab] = useState<"dashboard" | "purchase" | "evaluation">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "purchase" | "evaluation" | "forecast">("dashboard");
   // ── Evaluation tab ──
 
   // ── Purchase plan evaluation ──
@@ -280,12 +281,13 @@ export function HistoryDetail() {
       </div>
 
       <div className="analysis-surface analysis-detail-surface">
-      <AnalysisTabs<"dashboard" | "purchase" | "evaluation"> tabs={[{id:"dashboard",label:"Demanda",icon:BarChart3},{id:"purchase",label:"Plan de compras",icon:Package},{id:"evaluation",label:"Evaluación del plan",icon:ClipboardList}]} active={activeTab} onChange={setActiveTab} />
+      <AnalysisTabs<"dashboard" | "purchase" | "evaluation" | "forecast"> tabs={[{id:"dashboard",label:"Demanda",icon:BarChart3},{id:"purchase",label:"Plan de compras",icon:Package},{id:"evaluation",label:"Evaluación del plan",icon:ClipboardList},{id:"forecast",label:"Evaluación del pronóstico",icon:ClipboardCheck}]} active={activeTab} onChange={setActiveTab} />
 
       {(activeTab === "dashboard" || activeTab === "purchase") && <PredictionAnalysis
         key={id} executionId={id!} view={activeTab === "dashboard" ? "demand" : "purchase"}/>}
 
       {/* ── EVALUATION TAB ── */}
+      {activeTab === "forecast" && id && <ForecastEvaluation key={id} executionId={id} />}
       {activeTab === "evaluation" && (
         <div className="space-y-5">
 

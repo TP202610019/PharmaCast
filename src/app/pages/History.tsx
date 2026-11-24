@@ -355,11 +355,6 @@ export function History() {
                   </span>
                 </div>
 
-                {/* Metrics row */}
-                {record.status === ExecutionStatus.Completed && <p className="mb-3 text-sm text-gray-600">
-                  Precisión {record.accuracy == null ? "—" : `${record.accuracy.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}
-                  {" · "}Productos {record.totalProducts ?? "—"}
-                </p>}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
                     <p
@@ -397,14 +392,6 @@ export function History() {
                   </div>
                 </div>
 
-                {/* Footer */}
-                {record.status === ExecutionStatus.Completed && (
-                  <dl className="grid grid-cols-3 gap-2 mb-4 text-xs text-gray-500">
-                    <div><dt>Productos</dt><dd>{record.totalProducts?.toLocaleString("es-PE") ?? "—"}</dd></div>
-                    <div><dt>Unidades previstas</dt><dd>{record.totalUnits?.toLocaleString("es-PE", { maximumFractionDigits: 2 }) ?? "—"}</dd></div>
-                    <div><dt>Precisión</dt><dd>{record.accuracy == null ? "—" : `${record.accuracy.toLocaleString("es-PE", { maximumFractionDigits: 1 })}%`}</dd></div>
-                  </dl>
-                )}
                 <div className="flex items-center justify-end pt-3 border-t border-gray-100">
                   <div className="flex items-center gap-1 text-gray-400 group-hover:text-blue-500 transition-colors">
                     <span style={{ fontSize: "0.75rem" }}>Ver detalles</span>
