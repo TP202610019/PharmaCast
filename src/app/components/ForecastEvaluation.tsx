@@ -42,24 +42,6 @@ function getDate(value: unknown) {
   return Number.isFinite(ms) && iso(ms) === normalized ? ms : NaN;
 }
 
-function metrics(rows: Row[], method: "xgboost" | "naive") {
-  const matched = rows.filter(row => row[method] != null);
-  if (!matched.length) return { WAPE: null, MAE: null, RMSE: null, MBE: null, MAPE: null, "Unidades de más": null, "Unidades de menos": null };
-  let actual = 0, abs = 0, square = 0, above = 0, below = 0, pct = 0, count = 0;
-  for (const row of matched) {
-    const e = row[method]! - row.actual;
-    actual += row.actual;
-    abs += Math.abs(e);
-    square += e * e;
-    above += Math.max(e, 0);
-    below += Math.max(-e, 0);
-    if (row.actual > 0) { pct += Math.abs(e) / row.actual; count++; }
-  }
-  return { WAPE: actual ? 100 * abs / actual : null, MAE: abs / matched.length,
-    RMSE: Math.sqrt(square / matched.length), MBE: (above - below) / matched.length,
-    MAPE: count ? 100 * pct / count : null, "Unidades de más": above, "Unidades de menos": below };
-}
-
 export function ForecastEvaluation({ executionId }: { executionId: string }) {
   const { user, isDemo } = useAuth();
   const key = user?.id ? "forecast-evaluation:" + user.id + ":" + executionId : null;
@@ -197,7 +179,22 @@ export function ForecastEvaluation({ executionId }: { executionId: string }) {
   }
 
   const results = evaluations[horizon] ?? null;
-  const totals = results ? [{ Modelo: "XGBoost", ...metrics(results.rows, "xgboost") }, { Modelo: "NaiveWeekly", ...metrics(results.rows, "naive") }] : [];
+  const xgboostAccuracy = prediction?.metrics.find(metric =>
+    metric.scope === "Overall" && metric.method === "XGBoost")?.volumeAccuracy ?? null;
+  const xgboostOverall = prediction?.metrics.find(metric =>
+    metric.scope === "Overall" && metric.method === "XGBoost");
+  const naiveOverall = prediction?.baselineMetrics?.find(metric =>
+    metric.scope === "Overall" && metric.method === "NaiveWeekly");
+  const naiveAccuracy = prediction?.baselineMetrics?.find(metric =>
+    metric.scope === "Overall" && metric.method === "NaiveWeekly")?.volumeAccuracy ?? null;
+  const totals = results ? [
+    { Modelo: "XGBoost", WAPE: xgboostOverall?.wape ?? null, MAE: xgboostOverall?.mae ?? null,
+      RMSE: xgboostOverall?.rmse ?? null, MBE: xgboostOverall?.mbe ?? null,
+      "Precisión histórica (%)": xgboostAccuracy },
+    { Modelo: "NaiveWeekly", WAPE: naiveOverall?.wape ?? null, MAE: naiveOverall?.mae ?? null,
+      RMSE: naiveOverall?.rmse ?? null, MBE: naiveOverall?.mbe ?? null,
+      "Precisión histórica (%)": naiveAccuracy },
+  ] : [];
   const rows = results?.rows.filter(row => row.product.toLowerCase().includes(filter.trim().toLowerCase())) ?? [];
 
   const inventory = results?.inventory;
@@ -281,7 +278,8 @@ export function ForecastEvaluation({ executionId }: { executionId: string }) {
       </div>
       {inventory && inventory.planDays !== results.days && <p className="text-sm text-gray-500">El inventario y las cantidades de compra corresponden al plan guardado de {inventory.planDays} días.</p>}
       {results.rows.every(row => row.naive == null) && <p className="text-sm text-amber-700">NaiveWeekly requiere siete días de histórico disponibles antes del pronóstico.</p>}
-      <div className="analysis-table-section overflow-x-auto"><table className="w-full text-sm"><thead><tr><th scope="col">Modelo</th>{Object.keys(totals[0]).slice(1).map(name => <th key={name} scope="col">{name}{name === "WAPE" || name === "MAPE" ? " (%)" : ""}</th>)}</tr></thead>
+      <p className="text-sm text-gray-500">Las métricas resumen corresponden al análisis original guardado en la base de datos. El detalle por producto compara el pronóstico con el archivo de ventas reales.</p>
+      <div className="analysis-table-section overflow-x-auto"><table className="w-full text-sm"><thead><tr><th scope="col">Modelo</th>{Object.keys(totals[0]).slice(1).map(name => <th key={name} scope="col">{name}{name === "WAPE" ? " (%)" : ""}</th>)}</tr></thead>
         <tbody>{totals.map(({ Modelo, ...data }) => <tr key={Modelo}><th scope="row" className="py-2">{Modelo}</th>{Object.entries(data).map(([name, value]) => <td className="text-center" key={name}>{format(value)}</td>)}</tr>)}</tbody></table></div>
       {topSales.length > 0 && <div className="analysis-chart">
         <div className="shared-chart-heading"><h3>{topSales.length} productos más vendidos</h3></div>
